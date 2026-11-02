@@ -22,7 +22,11 @@ const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
 const addMonths=(d,n)=>{const x=new Date(d.getFullYear(),d.getMonth()+n,1);x.setDate(Math.min(d.getDate(),new Date(x.getFullYear(),x.getMonth()+1,0).getDate()));return x};
 const midnight=d=>{const x=new Date(d);x.setHours(0,0,0,0);return x};
 const mins=t=>{const [h,m]=(t||'0:0').split(':').map(Number);return h*60+m};
-const dur=e=>Math.max(0,mins(e.end)-mins(e.start));
+// start and end are both optional: no times = all day, only end = a deadline at that time
+const dur=e=>e.start&&e.end?Math.max(0,mins(e.end)-mins(e.start)):0;
+const eM=e=>e.end?mins(e.end):1440;           // minute the event is over (all day: end of day)
+const upM=e=>e.start?mins(e.start):eM(e);     // minute it "begins" for upcoming / next checks
+const timeText=e=>e.start?`${e.start}–${e.end}`:e.end?`${T('Tenggat')} ${e.end}`:T('Seharian');
 const fmtH=m=>(Math.round(m/6)/10).toString().replace('.',I18N.lang==='id'?',':'.');
 const uid=()=>(crypto.randomUUID?crypto.randomUUID():'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,10));
 let fDay,fDayShort,fDM,fMonth,fMonShort,fWd,fWdLong,fMonthLong;
@@ -38,7 +42,7 @@ function setFormats(){
   fMonthLong=new Intl.DateTimeFormat(L,{month:'long'});
 }
 setFormats();
-const sortEv=(a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start);
+const sortEv=(a,b)=>a.date.localeCompare(b.date)||(a.start||a.end||'').localeCompare(b.start||b.end||'');
 const mqMobile=matchMedia('(max-width:900px)');
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 
@@ -216,7 +220,7 @@ function renderCatVis(){
 
 /* ---------- time grid ---------- */
 function layoutDay(list){
-  const items=list.map(e=>{const s=mins(e.start);return {e,s,en:Math.max(mins(e.end),s+20)}}).sort((a,b)=>a.s-b.s||b.en-a.en);
+  const items=list.map(e=>{const s=e.start?mins(e.start):Math.max(0,mins(e.end)-30);return {e,s,en:Math.max(mins(e.end),s+20)}}).sort((a,b)=>a.s-b.s||b.en-a.en);
   const out=[];let cluster=[],cEnd=-1;
   const flush=()=>{const cols=[];cluster.forEach(it=>{let c=cols.findIndex(end=>end<=it.s);if(c<0){c=cols.length;cols.push(0)}cols[c]=it.en;it.col=c});cluster.forEach(it=>{it.cols=cols.length;out.push(it)});cluster=[]};
   items.forEach(it=>{if(cluster.length&&it.s>=cEnd){flush();cEnd=-1}cluster.push(it);cEnd=Math.max(cEnd,it.en)});
@@ -233,18 +237,21 @@ function renderGrid(){
     return `<button class="tg-dh ${s===today?'today':''}" data-goday="${s}" aria-label="${fDay.format(d)}"><span class="wd">${fWd.format(d)}</span><span class="dnum">${d.getDate()}</span><span class="load num">${l.length?fmtH(l.reduce((a,e)=>a+dur(e),0))+' '+T('j'):''}</span></button>`;
   }).join('');
   const gut=`<div class="tg-gut">${[...Array(23)].map((_,i)=>`<span style="top:${(i+1)*H}px">${pad(i+1)}:00</span>`).join('')}</div>`;
+  const loose=days.map(d=>(byDay[ymd(d)]||[]).filter(e=>!e.start&&!e.end));
+  const hasLoose=loose.some(l=>l.length);
+  const allrow=hasLoose?`<div class="tg-allrow"><div class="gutter">${T('Seharian')}</div>${loose.map(l=>`<div class="tg-allcell">${l.map(e=>`<button class="tallev ${e.status} ${lightCls(e.cat)}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}" title="${esc(e.title)}">${statusIcon(e)}${esc(e.title)}</button>`).join('')}</div>`).join('')}</div>`:'';
   const cols=days.map((d,ci)=>{
     const s=ymd(d),wk=d.getDay()===0||d.getDay()===6;
-    const blocks=layoutDay(byDay[s]||[]).map(({e,s:st,en,col,cols})=>{
+    const blocks=layoutDay((byDay[s]||[]).filter(e=>e.start||e.end)).map(({e,s:st,en,col,cols})=>{
       const h=Math.max(18,(en-st)/60*H-2),cls=h<36?'short':h>90?'tall':'';
-      return `<button class="tev ${e.status} ${cls} ${lightCls(e.cat)}" data-open="${esc(e.id)}" style="${catStyle(e.cat)};top:${st/60*H}px;height:${h}px;left:calc(${col/cols*100}% + 1px);width:calc(${100/cols}% - 4px)" title="${esc(e.title)} · ${e.start}–${e.end}">
-        <span class="tt">${statusIcon(e)}${esc(e.title)}</span><span class="tm">${cls==='short'?e.start:e.start+' – '+e.end}</span></button>`;
+      return `<button class="tev ${e.status} ${cls} ${e.start?'':'deadline'} ${lightCls(e.cat)}" data-open="${esc(e.id)}" style="${catStyle(e.cat)};top:${st/60*H}px;height:${h}px;left:calc(${col/cols*100}% + 1px);width:calc(${100/cols}% - 4px)" title="${esc(e.title)} · ${timeText(e)}">
+        <span class="tt">${statusIcon(e)}${esc(e.title)}</span><span class="tm">${cls==='short'?(e.start||e.end):e.start?e.start+' – '+e.end:timeText(e)}</span></button>`;
     }).join('');
     return `<div class="tg-col ${s===today?'today':''} ${wk?'weekend':''}" data-slot="${s}" style="--ci:${ci}">${blocks}${s===today?`<div class="nowline" style="top:${nowM/60*H}px"></div>`:''}</div>`;
   }).join('');
   const tg=$('tg');
   tg.style.setProperty('--n',days.length);
-  tg.innerHTML=`<div class="tg-head">${head}</div><div class="tg-body">${gut}${cols}</div>`;
+  tg.innerHTML=`<div class="tg-head">${head}</div>${allrow}<div class="tg-body">${gut}${cols}</div>`;
   if(scrollPending){
     scrollPending=false;
     const showsToday=days.some(d=>ymd(d)===today);
@@ -263,7 +270,7 @@ function renderMonth(){
     const s=ymd(d),list=(byDay[s]||[]).sort(sortEv);
     html+=`<div class="mcell ${d.getMonth()!==m0.getMonth()?'out':''} ${s===today?'today':''}" data-day="${s}" role="button" tabindex="0" aria-label="${fDay.format(d)}, ${T('{n} kegiatan',{n:list.length})}">
       <button class="mdn" data-goday="${s}">${d.getDate()===1?fDM.format(d):d.getDate()}</button>
-      ${list.slice(0,3).map(e=>`<button class="mchip ${e.status} ${dur(e)>=360?'long '+lightCls(e.cat):''}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}"><i></i><span class="mt">${e.start}</span><span class="mtt">${esc(e.title)}</span></button>`).join('')}
+      ${list.slice(0,3).map(e=>`<button class="mchip ${e.status} ${dur(e)>=360?'long '+lightCls(e.cat):''}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}"><i></i>${e.start||e.end?`<span class="mt">${e.start||e.end}</span>`:''}<span class="mtt">${esc(e.title)}</span></button>`).join('')}
       ${list.length>3?`<button class="mmore" data-day="${s}">${T('{n} lainnya',{n:list.length-3})}</button>`:''}
       <span class="dots">${list.slice(0,6).map(e=>`<i style="${catStyle(e.cat)}"></i>`).join('')}</span></div>`;
   }
@@ -277,7 +284,7 @@ function openDay(s){
   const list=events().filter(e=>e.date===s).sort(sortEv);
   $('dTitle').textContent=fDay.format(parse(s));
   $('dSum').textContent=list.length?T('{n} kegiatan · {h} jam',{n:list.length,h:fmtH(list.filter(active).reduce((a,e)=>a+dur(e),0))}):'';
-  $('dList').innerHTML=list.length?list.map(e=>`<li><span class="t num">${e.start}–${e.end}</span>${evButton(e)}
+  $('dList').innerHTML=list.length?list.map(e=>`<li><span class="t num">${timeText(e)}</span>${evButton(e)}
     ${e.status==='selesai'?`<button class="btn text small" data-status="rencana" data-id="${esc(e.id)}">${T('Batalkan tanda')}</button>`:`<button class="btn tonal small" data-status="selesai" data-id="${esc(e.id)}">${T('Selesai')}</button>`}</li>`).join('')
     :`<li class="empty" style="display:block">${T('Belum ada kegiatan di tanggal ini.')}</li>`;
   $('dayOv').hidden=false;
@@ -308,14 +315,14 @@ function renderList(){
   $('listOut').innerHTML=`<p class="smeta">${T('{n} kegiatan · {h} jam',{n:ev.length,h:fmtH(ev.filter(active).reduce((a,e)=>a+dur(e),0))})}</p>`+groups.map(g=>{
     const d=parse(g.date);
     return `<div class="sday ${g.date===today?'today':''}"><button class="sdate" data-goday="${g.date}" aria-label="${fDay.format(d)}"><span class="sdn">${d.getDate()}</span><span class="swd">${fMonShort.format(d)} ${d.getFullYear()!==now.getFullYear()?d.getFullYear():''}<br>${fWd.format(d)}</span></button>
-      <div class="sitems">${g.items.map(e=>`<button class="srow ${e.status}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}"><span class="dot"></span><span class="stime num">${e.start} – ${e.end}</span><span class="stitle">${esc(e.title)}<span class="scat">${esc(catLabel(e.cat))}</span></span><span class="pill st-${e.status}">${STATUS[e.status]}</span></button>`).join('')}</div></div>`;
+      <div class="sitems">${g.items.map(e=>`<button class="srow ${e.status}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}"><span class="dot"></span><span class="stime num">${timeText(e)}</span><span class="stitle">${esc(e.title)}<span class="scat">${esc(catLabel(e.cat))}</span></span><span class="pill st-${e.status}">${STATUS[e.status]}</span></button>`).join('')}</div></div>`;
   }).join('');
 }
 
 /* ---------- summary (dashboard) ---------- */
 function renderDashboard(){
   const ev=events(), today=ymd(now), nowM=now.getHours()*60+now.getMinutes();
-  const isPast=e=>e.date<today||(e.date===today&&mins(e.end)<=nowM);
+  const isPast=e=>e.date<today||(e.date===today&&eM(e)<=nowM);
   const ws=weekStart(now), wsS=ymd(ws), weS=ymd(addDays(ws,6));
   const ms=ymd(new Date(now.getFullYear(),now.getMonth(),1)), me=ymd(new Date(now.getFullYear(),now.getMonth()+1,0));
   const todayEv=ev.filter(e=>e.date===today).sort(sortEv);
@@ -323,13 +330,13 @@ function renderDashboard(){
   const monthPast=monthEv.filter(isPast), monthDone=monthPast.filter(e=>e.status==='selesai').length;
   const pct=monthPast.length?Math.round(monthDone/monthPast.length*100):0;
   const in14=ymd(addDays(now,14));
-  const upcoming=ev.filter(e=>active(e)&&(e.date>today||(e.date===today&&mins(e.start)>nowM))&&e.date<=in14).sort(sortEv);
+  const upcoming=ev.filter(e=>active(e)&&(e.date>today||(e.date===today&&upM(e)>nowM))&&e.date<=in14).sort(sortEv);
   const sum=l=>l.reduce((a,e)=>a+dur(e),0);
   const monthName=fMonthLong.format(now);
   const uEv=n=>T('kegiatan',{n}), uH=T('jam');
 
   $('stats').innerHTML=`
-    <div class="stat"><div class="label">${T('Hari ini')}</div><div class="value num">${todayEv.length}<small>${uEv(todayEv.length)}</small></div><div class="sub">${T('{n} tersisa · {h} jam',{n:todayEv.filter(e=>active(e)&&mins(e.end)>nowM).length,h:fmtH(sum(todayEv.filter(active)))})}</div></div>
+    <div class="stat"><div class="label">${T('Hari ini')}</div><div class="value num">${todayEv.length}<small>${uEv(todayEv.length)}</small></div><div class="sub">${T('{n} tersisa · {h} jam',{n:todayEv.filter(e=>active(e)&&eM(e)>nowM).length,h:fmtH(sum(todayEv.filter(active)))})}</div></div>
     <div class="stat"><div class="label">${T('Minggu ini')}</div><div class="value num">${fmtH(sum(weekEv))}<small>${uH}</small></div><div class="sub">${T('{n} kegiatan · {r}',{n:weekEv.length,r:rangeLabel(ws,addDays(ws,6))})}</div></div>
     <div class="stat"><div class="label">${T('Bulan {m}',{m:esc(monthName)})}</div><div class="value num">${monthEv.length}<small>${uEv(monthEv.length)}</small></div><div class="sub">${T('{h} jam terjadwal',{h:fmtH(sum(monthEv))})}</div></div>
     <div class="stat"><div class="label">${T('Terlaksana bulan ini')}</div><div class="value num">${monthDone}/${monthPast.length}</div><div class="meter" aria-hidden="true"><i style="width:${pct}%"></i></div><div class="sub">${monthPast.length?T('{p}% dari yang sudah lewat',{p:pct}):T('Belum ada yang lewat')}</div></div>
@@ -337,11 +344,13 @@ function renderDashboard(){
 
   // friendly one-paragraph summary of the day
   const hr=now.getHours(), greet=hr<4?T('Selamat malam'):hr<11?T('Selamat pagi'):hr<15?T('Selamat siang'):hr<18?T('Selamat sore'):T('Selamat malam');
-  const todayAct=todayEv.filter(active), curEv=todayAct.find(e=>mins(e.start)<=nowM&&nowM<mins(e.end)), laterEv=todayAct.filter(e=>mins(e.start)>nowM);
+  const todayAct=todayEv.filter(active), timed=todayAct.filter(e=>e.start&&e.end), loose=todayAct.filter(e=>!(e.start&&e.end));
+  const curEv=timed.find(e=>mins(e.start)<=nowM&&nowM<mins(e.end)), laterEv=timed.filter(e=>mins(e.start)>nowM);
   const hmsg=[];
   if(curEv)hmsg.push(T('Sekarang berlangsung <b>{t}</b> sampai {e}.',{t:esc(curEv.title),e:curEv.end}));
   if(laterEv.length)hmsg.push(curEv?T('Setelah itu ada {n} kegiatan lagi, berikutnya <b>{t}</b> pukul {s}.',{n:laterEv.length,t:esc(laterEv[0].title),s:laterEv[0].start}):T('Hari ini ada {n} kegiatan, yang pertama <b>{t}</b> pukul {s}.',{n:laterEv.length,t:esc(laterEv[0].title),s:laterEv[0].start}));
-  else if(todayAct.length&&!curEv)hmsg.push(T('Semua kegiatan hari ini sudah selesai. Kerja bagus!'));
+  if(loose.length)hmsg.push(T('Tanpa jam mulai hari ini: {l}.',{l:loose.slice(0,3).map(e=>`<b>${esc(e.title)}</b>`).join(', ')+(loose.length>3?' …':'')}));
+  if(todayAct.length&&!curEv&&!laterEv.length&&!loose.length)hmsg.push(T('Semua kegiatan hari ini sudah selesai. Kerja bagus!'));
   else if(!todayAct.length)hmsg.push(upcoming[0]?T('Hari ini kosong. Kegiatan berikutnya: <b>{t}</b>, {d}.',{t:esc(upcoming[0].title),d:fDayShort.format(parse(upcoming[0].date))}):T('Hari ini kosong dan belum ada rencana dalam 14 hari ke depan.'));
   if(!ev.length){hmsg.length=0;hmsg.push(T('Belum ada kegiatan. Klik <b>Buat</b>, atau minta Asisten AI menambahkannya, misalnya: "tambah rapat besok jam 10".'))}
   $('hello').innerHTML=`<div class="hdate">${fDay.format(now)}</div><h2>${greet}</h2><p>${hmsg.join(' ')}</p>`;
@@ -349,11 +358,12 @@ function renderDashboard(){
   $('todayMeta').textContent=todayEv.length?T('{h} jam terjadwal',{h:fmtH(sum(todayEv.filter(active)))}):'';
   let nextMarked=false;
   $('todayList').innerHTML=todayEv.length?todayEv.map(e=>{
-    const s=mins(e.start),en=mins(e.end),isNow=s<=nowM&&nowM<en&&active(e);
+    const en=eM(e),isNow=!!e.start&&mins(e.start)<=nowM&&nowM<en&&active(e);
     let flag='';
     if(isNow)flag=`<span class="flag now">${T('Berlangsung')}</span>`;
-    else if(!nextMarked&&s>nowM&&active(e)){nextMarked=true;flag=`<span class="flag next">${T('Berikutnya')}</span>`}
-    return `<li class="${isNow?'now':''} ${(en<=nowM||e.status==='selesai')?'done':''}"><div class="t num">${e.start}<span>${e.end}</span></div>${evButton(e,flag)}</li>`;
+    else if(!nextMarked&&e.start&&mins(e.start)>nowM&&active(e)){nextMarked=true;flag=`<span class="flag next">${T('Berikutnya')}</span>`}
+    const tcol=e.start?`${e.start}<span>${e.end}</span>`:e.end?`${T('Tenggat')}<span>${e.end}</span>`:T('Seharian');
+    return `<li class="${isNow?'now':''} ${(en<=nowM||e.status==='selesai')?'done':''}"><div class="t num">${tcol}</div>${evButton(e,flag)}</li>`;
   }).join(''):`<li class="empty" style="display:block"><b>${T('Tidak ada kegiatan hari ini.')}</b><br>${T('Tambahkan dengan tombol Buat, atau minta Asisten AI.')}</li>`;
 
   document.querySelectorAll('#catRangeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.range===catRange));
@@ -366,7 +376,7 @@ function renderDashboard(){
 
   const from=ymd(addDays(now,-7));
   const att=ev.filter(e=>e.status==='rencana'&&e.date>=from&&isPast(e)).sort(sortEv).reverse();
-  $('attList').innerHTML=att.length?att.slice(0,5).map(e=>`<li style="${catStyle(e.cat)}"><span class="ev" style="flex:1;min-width:0"><span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span><span class="sub">${fDayShort.format(parse(e.date))} · ${e.start}</span></span></span>
+  $('attList').innerHTML=att.length?att.slice(0,5).map(e=>`<li style="${catStyle(e.cat)}"><span class="ev" style="flex:1;min-width:0"><span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span><span class="sub">${fDayShort.format(parse(e.date))} · ${timeText(e)}</span></span></span>
     <span class="acts"><button class="btn tonal small" data-status="selesai" data-id="${esc(e.id)}">${T('Selesai')}</button><button class="btn text small" data-status="batal" data-id="${esc(e.id)}">${T('Batal')}</button></span></li>`).join('')+(att.length>5?`<li class="empty">${T('+{n} lainnya di tampilan Jadwal',{n:att.length-5})}</li>`:'')
     :`<li class="empty">${T('Semua kegiatan yang lewat sudah ditandai.')}</li>`;
 
@@ -374,8 +384,8 @@ function renderDashboard(){
   $('upList').innerHTML=upcoming.length?upcoming.slice(0,8).map(e=>{
     const d=parse(e.date),days=Math.round((d-t0)/864e5);
     let c=days===1?T('Besok'):T('{n} hari lagi',{n:days});
-    if(days===0){const m=mins(e.start)-nowM;c=m<60?T('{n} menit lagi',{n:m}):T('{n} jam lagi',{n:Math.floor(m/60)})}
-    return `<li><div class="datebox"><div class="m">${fMonShort.format(d)}</div><div class="d num">${d.getDate()}</div></div>${evButton(e,`<span class="num">${e.start}–${e.end}</span>`)}<span class="count ${days<=1?'soon':''}">${c}</span></li>`;
+    if(days===0){const m=upM(e)-nowM;c=!e.start&&!e.end?T('Hari ini'):m<60?T('{n} menit lagi',{n:m}):T('{n} jam lagi',{n:Math.floor(m/60)})}
+    return `<li><div class="datebox"><div class="m">${fMonShort.format(d)}</div><div class="d num">${d.getDate()}</div></div>${evButton(e,`<span class="num">${timeText(e)}</span>`)}<span class="count ${days<=1?'soon':''}">${c}</span></li>`;
   }).join(''):`<li class="empty" style="display:block">${T('Tidak ada kegiatan dalam 14 hari ke depan.')}</li>`;
 
   const ws2=addDays(ws,weekOff*7), days=[...Array(7)].map((_,i)=>addDays(ws2,i));
@@ -498,7 +508,7 @@ function openDetail(id){
   detailId=id;
   const grp=e.groupId?events().filter(x=>x.groupId===e.groupId).length:0;
   $('detBody').innerHTML=`
-    <div class="det-row" style="${catStyle(e.cat)}"><span class="det-sw"></span><div><h2 id="detTitle" class="${e.status==='batal'?'strike':''}">${esc(e.title)}</h2><div class="det-when">${fDayShort.format(parse(e.date))} · ${e.start} – ${e.end} <span class="num">(${fmtH(dur(e))} ${T('jam')})</span></div></div></div>
+    <div class="det-row" style="${catStyle(e.cat)}"><span class="det-sw"></span><div><h2 id="detTitle" class="${e.status==='batal'?'strike':''}">${esc(e.title)}</h2><div class="det-when">${fDayShort.format(parse(e.date))} · ${e.start?`${e.start} – ${e.end} <span class="num">(${fmtH(dur(e))} ${T('jam')})</span>`:timeText(e)}</div></div></div>
     <div class="det-row"><span class="ms">sell</span><span>${esc(catLabel(e.cat))}</span></div>
     ${grp>1?`<div class="det-row"><span class="ms">event_repeat</span><span>${T('Bagian dari kegiatan berulang ({n} kegiatan)',{n:grp})}</span></div>`:''}
     ${e.notes?`<div class="det-row"><span class="ms">notes</span><div class="det-notes">${linkify(e.notes)}</div></div>`:''}
@@ -597,6 +607,7 @@ function closeForm(){
   $('formOv').hidden=true;editing=null;
   if(returnDay){const d=returnDay;returnDay=null;openDay(d)}
 }
+$('f-notime').onclick=()=>{$('f-start').value='';$('f-end').value=''};
 $('f-repeat').addEventListener('change',()=>{$('f-until').value=defaultUntil();updateRepeatUI()});
 $('f-until').addEventListener('input',updateRepeatUI);
 $('f-date').addEventListener('input',updateRepeatUI);
@@ -607,8 +618,8 @@ $('evForm').addEventListener('submit',async ev=>{
   const err=m=>{$('f-err').textContent=m;$('f-err').hidden=false};
   if(!title)return err(T('Isi judul kegiatan.'));
   if(!date)return err(T('Pilih tanggal.'));
-  if(!start||!end)return err(T('Isi jam mulai dan selesai.'));
-  if(mins(end)<=mins(start))return err(T('Jam selesai harus setelah jam mulai.'));
+  if(start&&!end)return err(T('Isi jam selesai, atau kosongkan jam mulai untuk tugas dengan tenggat saja.'));
+  if(start&&mins(end)<=mins(start))return err(T('Jam selesai harus setelah jam mulai.'));
   const catIn=document.querySelector('input[name=cat]:checked');
   const base={title,date,start,end,cat:catIn?catIn.value:'',status:$('f-status').value,notes:$('f-notes').value.trim()};
   let list;
@@ -739,7 +750,7 @@ function aiContext(withTools=true){
   const picked=inRange(ev,from,to).sort((a,b)=>dist(a)-dist(b)).slice(0,maxLines).sort(sortEv);
   aiRefs=new Map();
   const noteLabel=en?'notes: ':'catatan: ';
-  const lines=picked.map((e,i)=>{aiRefs.set(String(i+1),e.id);return `#${i+1} ${e.date} ${fWd.format(parse(e.date))} ${e.start}-${e.end} | ${catLabel(e.cat)} | ${e.title} | ${STATUS[e.status]}${e.notes?' | '+noteLabel+e.notes.replace(/\s+/g,' ').slice(0,100):''}`});
+  const lines=picked.map((e,i)=>{aiRefs.set(String(i+1),e.id);return `#${i+1} ${e.date} ${fWd.format(parse(e.date))} ${e.start?e.start+'-'+e.end:e.end?'tenggat '+e.end:'seharian'} |${catLabel(e.cat)} | ${e.title} | ${STATUS[e.status]}${e.notes?' | '+noteLabel+e.notes.replace(/\s+/g,' ').slice(0,100):''}`});
   const ws=weekStart(now);
   const clock=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const capped=picked.length===maxLines;
@@ -763,7 +774,7 @@ function aiContext(withTools=true){
   if(en)return `You are a personal schedule assistant in the app "My Agenda". Reply in English, in a friendly but clear, concise and practical way.
 Rules:
 - Use ONLY the event data below. If the data is not enough to answer, say so plainly.
-- Calculate hours carefully from the start-end times. Events with status Cancelled do not count as time spent.
+- Calculate hours carefully from the start-end times. Events with status Cancelled do not count as time spent. Lines marked "tenggat HH:MM" are deadlines and "seharian" are all-day items; they have no duration, so they add no hours.
 - Format: short paragraphs and bullet points starting with "- ". You may use **bold** and "### " subheadings. When the answer compares or lists several items with the same attributes (e.g. a schedule with date, time, activity, status; hours per category), present it as a Markdown table (header row, then a "| --- | --- |" separator row, one row per item, max ~5 columns, short cells). Otherwise use bullets.
 ${rules}
 
@@ -777,7 +788,7 @@ ${body}`;
   return `Kamu asisten jadwal pribadi di aplikasi "Agenda Saya". Jawab dalam Bahasa Indonesia yang santai tapi jelas, ringkas dan praktis.
 Aturan:
 - Gunakan HANYA data kegiatan di bawah. Jika data tidak cukup untuk menjawab, katakan terus terang.
-- Hitung jam dengan teliti dari jam mulai-selesai. Kegiatan berstatus Dibatalkan tidak dihitung sebagai waktu terpakai.
+- Hitung jam dengan teliti dari jam mulai-selesai. Kegiatan berstatus Dibatalkan tidak dihitung sebagai waktu terpakai. Baris bertanda "tenggat HH:MM" adalah tenggat dan "seharian" adalah kegiatan sepanjang hari; keduanya tidak punya durasi, jadi tidak menambah jam.
 - Format: paragraf pendek dan poin berawalan "- ". Boleh **tebal** dan subjudul "### ". Jika jawaban berupa daftar/perbandingan beberapa item dengan atribut yang sama (mis. jadwal dengan tanggal, jam, kegiatan, status; jam per kategori), sajikan sebagai tabel Markdown (baris header, lalu baris pemisah "| --- | --- |", satu baris per item, maksimal ~5 kolom, isi sel singkat). Selain itu pakai poin.
 ${rules}
 
@@ -819,7 +830,7 @@ function md(s){
 }
 /* ---- AI proposals: the model only suggests, the user presses Terapkan ---- */
 const OP_LABEL={get tambah(){return T('Tambah')},get ubah(){return T('Ubah')},get hapus(){return T('Hapus')}};
-const whenOf=e=>`${fWd.format(parse(e.date))}, ${fDM.format(parse(e.date))} · ${e.start}–${e.end}`;
+const whenOf=e=>`${fWd.format(parse(e.date))}, ${fDM.format(parse(e.date))} · ${timeText(e)}`;
 const clockAfter=(start,minutes)=>{const m=mins(start)+minutes;return m<1440?pad(Math.floor(m/60))+':'+pad(m%60):null};
 // messages on a proposal are stored as {k,v} (text key + values) so they follow a language switch
 const msgOf=m=>T(m.k,m.v);
@@ -833,9 +844,10 @@ function buildProposals(raw){
     const catId=a.kategori?cats.find(c=>c.label.toLowerCase()===want||catName(c).toLowerCase()===want)?.id:undefined;
     if(a.kategori&&catId===undefined)p.warn.push({k:'Kategori "{c}" tidak ditemukan.',v:{c:a.kategori}});
     if(a.op==='tambah'){
-      if(!a.judul||!a.tanggal||!a.mulai||!a.selesai)return fail('Usulan kurang lengkap (judul, tanggal, atau jam).');
-      if(a.selesai<=a.mulai)return fail('Jam selesai harus setelah jam mulai.');
-      p.next={id:uid(),title:a.judul,date:a.tanggal,start:a.mulai,end:a.selesai,cat:catId??'',status:a.status||'rencana',notes:a.catatan||'',createdAt:Date.now()};
+      if(!a.judul||!a.tanggal)return fail('Usulan kurang lengkap (judul, tanggal, atau jam).');
+      if(a.mulai&&!a.selesai)return fail('Usulan kurang lengkap (judul, tanggal, atau jam).');
+      if(a.mulai&&a.selesai<=a.mulai)return fail('Jam selesai harus setelah jam mulai.');
+      p.next={id:uid(),title:a.judul,date:a.tanggal,start:a.mulai||'',end:a.selesai||'',cat:catId??'',status:a.status||'rencana',notes:a.catatan||'',createdAt:Date.now()};
       p.title=a.judul;
       return;
     }
@@ -849,20 +861,21 @@ function buildProposals(raw){
     if(a.tanggal&&a.tanggal!==ev.date)patch.date=a.tanggal;
     if(a.mulai&&a.mulai!==ev.start)patch.start=a.mulai;
     if(a.selesai&&a.selesai!==ev.end)patch.end=a.selesai;
-    if(patch.start&&!patch.end&&!a.selesai){const e2=clockAfter(patch.start,dur(ev));if(e2)patch.end=e2} // moved start only: keep the duration
+    if(patch.start&&!patch.end&&!a.selesai&&ev.start){const e2=clockAfter(patch.start,dur(ev));if(e2)patch.end=e2} // moved start only: keep the duration
     if(catId!==undefined&&catId!==ev.cat)patch.cat=catId;
     if(a.status&&a.status!==ev.status)patch.status=a.status;
     if(a.catatan!==undefined&&a.catatan!==(ev.notes||''))patch.notes=a.catatan;
     if(!Object.keys(patch).length)return fail('Tidak ada yang berubah dari kegiatan ini.');
     const next={...ev,...patch};
-    if(next.end<=next.start)return fail('Jam selesai harus setelah jam mulai.');
+    if(next.start&&!next.end)return fail('Usulan kurang lengkap (judul, tanggal, atau jam).');
+    if(next.start&&next.end<=next.start)return fail('Jam selesai harus setelah jam mulai.');
     p.patch=patch;p.next=next;
   });
   // overlap warnings, ignoring events that are being deleted in the same batch
   const gone=new Set(out.filter(p=>p.op==='hapus'&&p.id).map(p=>p.id));
   out.forEach(p=>{
-    if(!p.next||p.status==='invalid'||p.next.status==='batal')return;
-    events().filter(e=>e.id!==p.next.id&&!gone.has(e.id)&&e.date===p.next.date&&active(e)&&mins(e.start)<mins(p.next.end)&&mins(p.next.start)<mins(e.end))
+    if(!p.next||p.status==='invalid'||p.next.status==='batal'||!p.next.start)return;
+    events().filter(e=>e.id!==p.next.id&&!gone.has(e.id)&&e.date===p.next.date&&active(e)&&e.start&&mins(e.start)<mins(p.next.end)&&mins(p.next.start)<mins(e.end))
       .slice(0,2).forEach(e=>p.warn.push({k:'Bentrok dengan "{t}" ({s}–{e}).',v:{t:e.title,s:e.start,e:e.end}}));
   });
   return out;
