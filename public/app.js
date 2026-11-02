@@ -363,7 +363,7 @@ function renderDashboard(){
   const ms=ymd(new Date(now.getFullYear(),now.getMonth(),1)), me=ymd(new Date(now.getFullYear(),now.getMonth()+1,0));
   const todayEv=ev.filter(e=>e.date===today).sort(sortEv);
   const weekEv=inRange(ev,wsS,weS).filter(active), monthEv=inRange(ev,ms,me).filter(active);
-  const monthPast=monthEv.filter(isPast), monthDone=monthPast.filter(e=>e.status==='selesai').length;
+  const monthPast=monthEv.filter(e=>isPast(e)&&!(e.seriesId&&e.status==='rencana')), monthDone=monthPast.filter(e=>e.status==='selesai').length;
   const pct=monthPast.length?Math.round(monthDone/monthPast.length*100):0;
   const in14=ymd(addDays(now,14));
   const upcoming=ev.filter(e=>active(e)&&(e.date>today||(e.date===today&&upM(e)>nowM))&&e.date<=in14).sort(sortEv);
@@ -411,7 +411,7 @@ function renderDashboard(){
     :`<div class="empty">${catRange==='week'?T('Belum ada kegiatan minggu ini.'):T('Belum ada kegiatan bulan ini.')}</div>`;
 
   const from=ymd(addDays(now,-7));
-  const att=ev.filter(e=>e.status==='rencana'&&e.date>=from&&isPast(e)).sort(sortEv).reverse();
+  const att=ev.filter(e=>e.status==='rencana'&&e.date>=from&&isPast(e)&&!e.seriesId).sort(sortEv).reverse();
   $('attList').innerHTML=att.length?att.slice(0,5).map(e=>`<li style="${catStyle(e.cat)}"><span class="ev" style="flex:1;min-width:0"><span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span><span class="sub">${fDayShort.format(parse(e.date))} · ${timeText(e)}</span></span></span>
     <span class="acts"><button class="btn tonal small" data-status="selesai" data-id="${esc(e.id)}">${T('Selesai')}</button><button class="btn text small" data-status="batal" data-id="${esc(e.id)}">${T('Batal')}</button></span></li>`).join('')+(att.length>5?`<li class="empty">${T('+{n} lainnya di tampilan Jadwal',{n:att.length-5})}</li>`:'')
     :`<li class="empty">${T('Semua kegiatan yang lewat sudah ditandai.')}</li>`;
