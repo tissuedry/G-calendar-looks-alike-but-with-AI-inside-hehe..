@@ -204,6 +204,7 @@ const EN = {
   "Asisten jadwal": "Schedule assistant",
   "Percakapan baru": "New conversation",
   "Tutup asisten": "Close assistant",
+  "Geser untuk mengubah lebar": "Drag to resize",
   "Pilih penyedia AI": "Choose AI provider",
   "Model AI": "AI model",
   "Tanya tentang jadwal Anda…": "Ask about your schedule…",

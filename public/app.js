@@ -764,7 +764,7 @@ function aiContext(withTools=true){
 Rules:
 - Use ONLY the event data below. If the data is not enough to answer, say so plainly.
 - Calculate hours carefully from the start-end times. Events with status Cancelled do not count as time spent.
-- Format: short paragraphs and bullet points starting with "- ". You may use **bold** and "### " subheadings. Do not use tables.
+- Format: short paragraphs and bullet points starting with "- ". You may use **bold** and "### " subheadings. When the answer compares or lists several items with the same attributes (e.g. a schedule with date, time, activity, status; hours per category), present it as a Markdown table (header row, then a "| --- | --- |" separator row, one row per item, max ~5 columns, short cells). Otherwise use bullets.
 ${rules}
 
 Current time: ${fDay.format(now)}, ${clock}. Today's date (ISO): ${ymd(now)}.
@@ -778,7 +778,7 @@ ${body}`;
 Aturan:
 - Gunakan HANYA data kegiatan di bawah. Jika data tidak cukup untuk menjawab, katakan terus terang.
 - Hitung jam dengan teliti dari jam mulai-selesai. Kegiatan berstatus Dibatalkan tidak dihitung sebagai waktu terpakai.
-- Format: paragraf pendek dan poin berawalan "- ". Boleh **tebal** dan subjudul "### ". Jangan pakai tabel.
+- Format: paragraf pendek dan poin berawalan "- ". Boleh **tebal** dan subjudul "### ". Jika jawaban berupa daftar/perbandingan beberapa item dengan atribut yang sama (mis. jadwal dengan tanggal, jam, kegiatan, status; jam per kategori), sajikan sebagai tabel Markdown (baris header, lalu baris pemisah "| --- | --- |", satu baris per item, maksimal ~5 kolom, isi sel singkat). Selain itu pakai poin.
 ${rules}
 
 Waktu sekarang: ${fDay.format(now)}, pukul ${clock}. Tanggal hari ini (ISO): ${ymd(now)}.
@@ -793,16 +793,29 @@ function md(s){
   const out=[];let list=null;
   const inline=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g,'$1<i>$2</i>');
   const flush=()=>{if(list){out.push(`<${list.tag}>${list.items.join('')}</${list.tag}>`);list=null}};
+  let tbl=null;
+  const cells=l=>l.replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+  const flushTbl=()=>{
+    if(!tbl)return;
+    const [head,...rows]=tbl;tbl=null;
+    out.push(`<div class="md-table"><table><thead><tr>${head.map(c=>`<th>${inline(c)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${head.map((_,i)=>`<td>${inline(r[i]||'')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+  };
   for(const raw of s.split('\n')){
     const l=raw.trim();
     let m;
+    if(l.startsWith('|')&&l.length>1){
+      flush();
+      if(/^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/.test(l))continue; // separator row
+      (tbl||(tbl=[])).push(cells(l));continue;
+    }
+    flushTbl();
     if(!l){flush();continue}
     if((m=l.match(/^#{1,4}\s+(.*)/))){flush();out.push(`<h4>${inline(m[1])}</h4>`);continue}
     if((m=l.match(/^[-*•]\s+(.*)/))){if(!list||list.tag!=='ul'){flush();list={tag:'ul',items:[]}}list.items.push(`<li>${inline(m[1])}</li>`);continue}
     if((m=l.match(/^\d+[.)]\s+(.*)/))){if(!list||list.tag!=='ol'){flush();list={tag:'ol',items:[]}}list.items.push(`<li>${inline(m[1])}</li>`);continue}
     flush();out.push(`<p>${inline(l)}</p>`);
   }
-  flush();return out.join('');
+  flush();flushTbl();return out.join('');
 }
 /* ---- AI proposals: the model only suggests, the user presses Terapkan ---- */
 const OP_LABEL={get tambah(){return T('Tambah')},get ubah(){return T('Ubah')},get hapus(){return T('Hapus')}};
@@ -1015,6 +1028,27 @@ function setAI(open){
   store.set('agenda-ai',open?'1':'0');
   if(open){renderAI();closeDrawer();loadProviders();setTimeout(()=>$('aiInput').focus(),30)}
 }
+// drag the panel's left edge to resize it (desktop); width is remembered
+(()=>{
+  const panel=$('aiPanel'),MIN=300,maxW=()=>Math.max(MIN,Math.min(900,innerWidth-420));
+  const setW=w=>panel.style.setProperty('--ai-w',Math.round(Math.max(MIN,Math.min(maxW(),w)))+'px');
+  const saved=+store.get('agenda-ai-w');if(saved)setW(saved);
+  const h=document.createElement('div');h.className='ai-resize';h.title=T('Geser untuk mengubah lebar');
+  h.setAttribute('role','separator');h.setAttribute('aria-orientation','vertical');
+  panel.prepend(h);
+  h.addEventListener('pointerdown',e=>{
+    e.preventDefault();h.setPointerCapture(e.pointerId);h.classList.add('drag');document.body.classList.add('ai-resizing');
+    const x0=e.clientX,w0=panel.getBoundingClientRect().width;
+    const move=ev=>setW(w0+(x0-ev.clientX));
+    const up=()=>{
+      h.removeEventListener('pointermove',move);h.removeEventListener('pointerup',up);h.removeEventListener('pointercancel',up);
+      h.classList.remove('drag');document.body.classList.remove('ai-resizing');
+      store.set('agenda-ai-w',Math.round(panel.getBoundingClientRect().width));
+    };
+    h.addEventListener('pointermove',move);h.addEventListener('pointerup',up);h.addEventListener('pointercancel',up);
+  });
+  h.addEventListener('dblclick',()=>{panel.style.removeProperty('--ai-w');store.set('agenda-ai-w','')});
+})();
 $('navAI').onclick=()=>setAI(true);
 $('tabAI').onclick=()=>setAI($('aiPanel').hidden);
 $('aiBtn').onclick=()=>setAI($('aiPanel').hidden);
