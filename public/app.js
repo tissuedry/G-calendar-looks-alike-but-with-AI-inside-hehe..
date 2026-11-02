@@ -1103,7 +1103,11 @@ document.body.addEventListener('click',e=>{
   const op=e.target.closest('[data-open]');
   if(op){showDetail(op.dataset.open);return}
   const st=e.target.closest('[data-status]');
-  if(st){setStatus(st.dataset.id,st.dataset.status);return}
+  if(st){
+    const ev=events().find(x=>x.id===st.dataset.id);
+    if(st.dataset.status==='batal'&&ev&&ev.status!=='batal'&&!confirm(T('Batalkan kegiatan "{t}"?',{t:ev.title})))return;
+    setStatus(st.dataset.id,st.dataset.status);return;
+  }
   const gd=e.target.closest('[data-goday]');
   if(gd){openDayView(gd.dataset.goday);return}
   const day=e.target.closest('[data-day]');

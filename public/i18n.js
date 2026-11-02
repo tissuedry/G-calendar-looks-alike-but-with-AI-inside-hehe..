@@ -166,6 +166,7 @@ const EN = {
   "Isi jam selesai, atau kosongkan jam mulai untuk tugas dengan tenggat saja.": "Enter an end time, or leave the start time empty for a deadline-only task.",
   "Jam boleh dikosongkan. Isi hanya jam selesai untuk tugas dengan tenggat, atau kosongkan keduanya untuk kegiatan seharian.": "Times are optional. Fill in only the end time for a task with a deadline, or leave both empty for an all-day item.",
   "Kosongkan jam": "Clear times",
+  "Batalkan kegiatan \"{t}\"?": "Cancel the event \"{t}\"?",
   "Tenggat": "Due",
   "Seharian": "All day",
   "Tanpa jam mulai hari ini: {l}.": "No start time today: {l}.",
