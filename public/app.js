@@ -75,9 +75,10 @@ const visible=e=>!hiddenCats.has(catKey(e.cat));
    skip = dates removed from the series; st = per-date status overrides {date:status}. */
 function expandSeries(s){
   const r=s.repeat,out=[];
-  if(!r||!r.until||!s.date)return out;
-  const d0=parse(s.date),u=parse(r.until),skip=new Set(r.skip||[]);
-  for(let d=new Date(d0),i=0;d<=u&&i<800;d=addDays(d,1),i++){
+  if(!r||!s.date)return out;
+  // no end date = keeps going: show from a year back to ~1.5 years ahead
+  const d0=parse(s.date),lo=addDays(midnight(now),-370),u=r.until?parse(r.until):addDays(midnight(now),540),skip=new Set(r.skip||[]);
+  for(let d=new Date(d0>lo?d0:lo),i=0;d<=u&&i<1000;d=addDays(d,1),i++){
     const ok=r.freq==='monthly'?d.getDate()===d0.getDate():(r.days||[]).includes(d.getDay());
     if(!ok)continue;
     const k=ymd(d);
@@ -89,8 +90,10 @@ function expandSeries(s){
 function events(){return real.some(e=>e.repeat)?real.flatMap(e=>e.repeat?expandSeries(e):[e]):real}
 const rawEv=id=>real.find(x=>x.id===id);
 const ruleText=(r,date)=>{
-  const d=parse(date),u=parse(r.until);
+  const d=parse(date);
   const what=r.freq==='monthly'?T('tiap tanggal {n}',{n:d.getDate()}):r.days.length===7?T('setiap hari'):[1,2,3,4,5,6,0].filter(x=>r.days.includes(x)).map(x=>fWd.format(new Date(2024,0,7+x))).join(', ');
+  if(!r.until)return `${what} · ${T('tanpa batas akhir')}`;
+  const u=parse(r.until);
   return `${what} · ${T('sampai')} ${fDM.format(u)} ${u.getFullYear()}`;
 };
 
@@ -606,7 +609,7 @@ function readRule(){
   if(r==='none')return null;
   const freq=r==='monthly'?'monthly':'weekly';
   const days=freq==='monthly'?[]:r==='daily'?[0,1,2,3,4,5,6]:r==='weekdays'?[1,2,3,4,5]:r==='weekly'?[d.getDay()]:[...document.querySelectorAll('#dowPick input:checked')].map(x=>+x.value);
-  return {freq,days,until:$('f-until').value,skip:[],st:{}};
+  return {freq,days,until:$('f-open').checked?'':$('f-until').value,skip:[],st:{}};
 }
 const presetOf=(r,date)=>{
   if(!r)return 'none';
@@ -619,9 +622,10 @@ function updateRepeatUI(){
   $('untilWrap').hidden=r==='none';
   $('dowWrap').hidden=r!=='custom';
   if(r==='none')return;
-  if(!$('f-until').value||$('f-until').value<$('f-date').value)$('f-until').value=defaultUntil();
+  $('f-until').disabled=$('f-open').checked;
+  if(!$('f-open').checked&&(!$('f-until').value||$('f-until').value<$('f-date').value))$('f-until').value=defaultUntil();
   const rule=readRule(),n=expandSeries({date:$('f-date').value,repeat:rule}).length;
-  $('repPreview').textContent=n?T('Akan tampil {n} kali',{n}):T('Belum ada tanggal yang cocok');
+  $('repPreview').textContent=!n?T('Belum ada tanggal yang cocok'):rule.until?T('Akan tampil {n} kali',{n}):T('Terus berulang');
 }
 function openForm(e,date,startTime){
   editing=e||null;
@@ -638,7 +642,7 @@ function openForm(e,date,startTime){
   $('f-status').value=e?e.status:'rencana';
   $('f-notes').value=e?(e.notes||''):'';
   $('dowPick').innerHTML=[1,2,3,4,5,6,0].map(x=>`<label><input type="checkbox" value="${x}" ${ser&&ser.repeat.days?.includes(x)?'checked':''}><span>${fWd.format(new Date(2024,0,7+x))}</span></label>`).join('');
-  $('f-repeat').value=presetOf(ser?.repeat,ser?.date);$('f-until').value=ser?ser.repeat.until:'';
+  $('f-repeat').value=presetOf(ser?.repeat,ser?.date);$('f-until').value=ser?ser.repeat.until:'';$('f-open').checked=!!ser&&!ser.repeat.until;
   $('repeatWrap').hidden=!!e&&!ser;               // an existing one-off event cannot become a series
   $('f-status').closest('label').hidden=!!ser;     // per-date status is set from each occurrence instead
   updateRepeatUI();
@@ -656,6 +660,7 @@ $('f-repeat').addEventListener('change',()=>{$('f-until').value=defaultUntil();u
 $('f-until').addEventListener('input',updateRepeatUI);
 $('f-date').addEventListener('input',updateRepeatUI);
 $('dowPick').addEventListener('change',updateRepeatUI);
+$('f-open').addEventListener('change',updateRepeatUI);
 
 $('evForm').addEventListener('submit',async ev=>{
   ev.preventDefault();
@@ -673,9 +678,9 @@ $('evForm').addEventListener('submit',async ev=>{
   if(editing&&!ser){list=[{...editing,...base}]}
   else{
     if(rule){
-      if(!rule.until||rule.until<date)return err(T('Tanggal akhir pengulangan harus setelah tanggal mulai.'));
+      if(rule.until&&rule.until<date||(!rule.until&&!$('f-open').checked))return err(T('Tanggal akhir pengulangan harus setelah tanggal mulai.'));
       if(rule.freq==='weekly'&&!rule.days.length)return err(T('Pilih minimal satu hari.'));
-      if((parse(rule.until)-parse(date))/864e5>730)return err(T('Pengulangan maksimal 2 tahun dari tanggal mulai.'));
+      if(rule.until&&(parse(rule.until)-parse(date))/864e5>730)return err(T('Pengulangan maksimal 2 tahun dari tanggal mulai.'));
       if(!expandSeries({date,repeat:rule}).length)return err(T('Belum ada tanggal yang cocok'));
     }
     if(ser){
@@ -804,7 +809,7 @@ function aiContext(withTools=true){
   const lines=picked.map((e,i)=>{aiRefs.set(String(i+1),e.id);return `#${i+1} ${e.date} ${fWd.format(parse(e.date))} ${e.start?e.start+'-'+e.end:e.end?'tenggat '+e.end:'seharian'} |${catLabel(e.cat)} | ${e.title} | ${STATUS[e.status]}${e.notes?' | '+noteLabel+e.notes.replace(/\s+/g,' ').slice(0,100):''}`});
   // a recurring series is sent as ONE line (its rule) plus the occurrences of the next 14 days that the app already computed
   const t14=ymd(addDays(t0,13)),tToday=ymd(t0);
-  real.filter(s=>s.repeat&&s.repeat.until>=from&&s.date<=to).forEach(s=>{
+  real.filter(s=>s.repeat&&(!s.repeat.until||s.repeat.until>=from)&&s.date<=to).forEach(s=>{
     const n=lines.length+1;aiRefs.set(String(n),s.id);
     const soon=expandSeries(s).filter(o=>o.date>=tToday&&o.date<=t14).map(o=>`${fWd.format(parse(o.date))} ${o.date.slice(5)}${o.status!=='rencana'?' ('+STATUS[o.status]+')':''}`).join(', ');
     lines.push(`#${n} ${en?'REPEATING':'BERULANG'} ${ruleText(s.repeat,s.date)}, ${en?'starting':'mulai'} ${s.date} ${s.start?s.start+'-'+s.end:s.end?'tenggat '+s.end:'seharian'} |${catLabel(s.cat)} | ${s.title}${s.notes?' | '+noteLabel+s.notes.replace(/\s+/g,' ').slice(0,100):''} | ${en?'next 14 days':'14 hari ke depan'}: ${soon||(en?'none':'tidak ada')}`);
