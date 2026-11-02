@@ -734,7 +734,7 @@ $('cmList').addEventListener('click',async e=>{
     const id=y.dataset.cmdelYes,target=$('cmMove')?$('cmMove').value:'';
     y.disabled=true;
     try{
-      const moved=events().filter(x=>x.cat===id).map(x=>({...x,cat:target}));
+      const moved=real.filter(x=>x.cat===id).map(x=>({...x,cat:target}));
       if(moved.length)await saveMany(moved);
       cmState.del=null;
       await saveCats(cats.filter(c=>c.id!==id));
@@ -826,13 +826,13 @@ function aiContext(withTools=true){
 - Use the tool ONLY when the user clearly asks to add, change, move or delete an event. For analysis or ordinary questions, answer in text only.
 - If the user pastes notes or a task list and asks for a schedule: create an "add" proposal for every item that has a date. Never invent times: if only a day is given ("tomorrow"), leave "mulai" and "selesai" empty (all-day); if only one time is given ("at 10"), fill ONLY "mulai" and leave "selesai" empty; fill "selesai" only when the user states an end time, a duration or a range; for a deadline ("due by 5pm") fill only "selesai". For routines ("every Monday", "daily", a pasted class timetable) make ONE proposal per item using "ulangi" (+ "hari", "sampai"), never many separate dates; ALWAYS fill "judul" and "tanggal" (the first matching date from today) and "hari"; leave "sampai" empty when the user gives no end date. Do not create proposals for items without a date; ask for the date instead. Do not add events that already exist in the data on the same date (check first and say so if it exists), and do not repeat the notes back in your answer. Always propose through the tool; never write JSON inside the text.
 - For change/delete, put the event number from the data in "ref" (e.g. "#12"). For a REPEATING series: to delete the whole series leave "tanggal" empty; to delete just one date (e.g. a holiday) put that date in "tanggal". For a change, fill in only the fields that change. If the user asks for a GROUP ("the ones about lectures", "delete some", a category or topic), do NOT ask which ones: make one proposal per matching event from the data (up to 20, closest to today first) and let the user reject the ones they want to keep; briefly say how many you found. Ask a question only when nothing in the data matches, or when a single specific event is meant and several equally fit.
-- Convert relative dates (tomorrow, next Thursday) to YYYY-MM-DD based on the current time. Use 24-hour HH:MM times. The category must be one of the listed categories.
+- Convert relative dates (tomorrow, next Thursday) to YYYY-MM-DD based on the current time. Use 24-hour HH:MM times. Prefer an existing category; if the user wants a new one, just put the new name in "kategori" (the app creates it when the user approves). You can also manage categories with op kategori_tambah ("judul" = new name), kategori_ubah ("kategori" = current name, "judul" = new name) and kategori_hapus ("kategori" = name; its events become uncategorised).
 - Before calling the tool, first write 1–2 short sentences: what you are proposing, and which items you skipped and why (e.g. no date). Keep each proposal's "alasan" brief; do not repeat the title or date.`:`- You cannot change the schedule in this answer. If the user wants to add, change, move or delete an event, tell them to say so directly (for example: "add a team meeting tomorrow at 10") so you can propose it.`)
     :(withTools?`- Kamu BISA mengusulkan perubahan jadwal (tambah/ubah/hapus) lewat alat usulkan_perubahan_jadwal. Pengguna akan menyetujui atau menolak tiap usulan, jadi jangan bilang jadwal sudah berubah; sebut sebagai "usulan".
 - Pakai alat HANYA jika pengguna jelas meminta menambah, mengubah, memindahkan, atau menghapus kegiatan. Untuk analisis atau pertanyaan biasa, jawab dengan teks saja.
 - Jika pengguna menempelkan catatan atau daftar tugas dan meminta dibuatkan jadwal: buat usulan "tambah" untuk setiap butir yang ada tanggalnya. Jangan mengarang jam: jika hanya hari yang disebut ("besok"), kosongkan "mulai" dan "selesai" (seharian); jika hanya satu jam disebut ("jam 10"), isi HANYA "mulai" dan kosongkan "selesai"; isi "selesai" hanya bila pengguna menyebut jam selesai, durasi, atau rentang; untuk tenggat ("deadline jam 17") isi "selesai" saja. Untuk kegiatan rutin ("tiap Senin", "setiap hari", jadwal kuliah yang ditempel) buat SATU usulan per butir dengan "ulangi" (+ "hari", "sampai"), jangan banyak usulan per tanggal; SELALU isi "judul", "tanggal" (tanggal pertama yang cocok mulai hari ini), dan "hari"; ruangan/kode kelas taruh di "catatan"; kosongkan "sampai" bila pengguna tidak menyebut tanggal akhir. Butir tanpa tanggal jangan dibuatkan usulan; tanyakan tanggalnya. Jangan menambah kegiatan yang sudah ada di data pada tanggal yang sama (cek dulu, beri tahu jika sudah ada), dan jangan mengulang isi catatan di jawabanmu. Selalu usulkan lewat alat; jangan pernah menulis JSON di dalam teks.
 - Untuk ubah/hapus, isi "ref" dengan nomor kegiatan dari data (mis. "#12"). Untuk seri BERULANG: menghapus seluruh seri = kosongkan "tanggal"; menghapus satu tanggal saja (mis. libur) = isi "tanggal" dengan tanggal itu. Untuk ubah, isi hanya kolom yang berubah. Jika pengguna meminta sekelompok kegiatan ("yang terkait kuliah", "saya ingin hapus beberapa", satu kategori atau topik), JANGAN bertanya yang mana: buat satu usulan untuk setiap kegiatan yang cocok di data (maksimal 20, yang terdekat dengan hari ini lebih dulu) dan biarkan pengguna menolak yang ingin dipertahankan; sebutkan singkat berapa yang kamu temukan. Bertanya hanya bila tidak ada yang cocok di data, atau bila yang dimaksud satu kegiatan tertentu tetapi ada beberapa yang sama cocoknya.
-- Tanggal relatif (besok, lusa, Kamis depan) ubah menjadi YYYY-MM-DD berdasarkan waktu sekarang. Jam format 24 jam HH:MM. Kategori harus salah satu dari daftar kategori.
+- Tanggal relatif (besok, lusa, Kamis depan) ubah menjadi YYYY-MM-DD berdasarkan waktu sekarang. Jam format 24 jam HH:MM. Utamakan kategori yang sudah ada; jika pengguna ingin kategori baru, cukup tulis nama barunya di "kategori" (aplikasi membuatnya saat pengguna menyetujui). Kamu juga bisa mengelola kategori dengan op kategori_tambah ("judul" = nama baru), kategori_ubah ("kategori" = nama sekarang, "judul" = nama baru), dan kategori_hapus ("kategori" = namanya; kegiatannya menjadi tanpa kategori).
 - Sebelum memanggil alat, tulis 1–2 kalimat singkat lebih dulu: apa yang kamu usulkan, dan butir mana yang dilewati beserta alasannya (mis. tanpa tanggal). Isi "alasan" tiap usulan cukup singkat, jangan mengulang judul atau tanggal.`:`- Kamu tidak bisa mengubah jadwal pada jawaban ini. Jika pengguna ingin menambah, mengubah, memindahkan, atau menghapus kegiatan, minta mereka menuliskannya langsung (mis. "tambahkan rapat tim besok jam 10") supaya kamu bisa mengusulkannya.`);
   if(en)return `You are a personal schedule assistant in the app "My Agenda". Reply in English, in a friendly but clear, concise and practical way.
 Rules:
@@ -915,20 +915,43 @@ function ruleFromAction(a){
   if(until&&(until<a.tanggal||(parse(until)-d)/864e5>730))return null;
   return {freq,days,until,skip:[],st:{}};
 }
+const catByName=n=>{const w=String(n||'').trim().toLowerCase();return w?cats.find(c=>c.label.toLowerCase()===w||catName(c).toLowerCase()===w):undefined};
+const newCatObj=label=>{const used=cats.map(c=>c.color);return {id:'c'+uid().replace(/-/g,'').slice(0,10),label,color:PALETTE.find(p=>!used.includes(p))||PALETTE[cats.length%PALETTE.length]}};
 function buildProposals(raw){
   const out=[];
   raw.slice(0,20).forEach((a,i)=>{
     const p={key:'p'+i+'-'+Date.now().toString(36),op:a.op,reason:a.alasan||'',status:'pending',warn:[]};
     out.push(p);
     const fail=(k,v)=>{p.status='invalid';p.error={k,v};p.title=p.title||a.judul||''};
-    const want=a.kategori?a.kategori.toLowerCase():'';
-    const catId=a.kategori?cats.find(c=>c.label.toLowerCase()===want||catName(c).toLowerCase()===want)?.id:undefined;
-    if(a.kategori&&catId===undefined)p.warn.push({k:'Kategori "{c}" tidak ditemukan.',v:{c:a.kategori}});
+    if(a.op.startsWith('kategori_')){ // categories: add / rename / delete, approved like any other proposal
+      p.catOp=true;p.op=a.op.slice(9);
+      const cur=catByName(a.kategori),name=(a.judul||'').trim();
+      if(p.op==='tambah'){
+        const nm=name||(a.kategori||'').trim();p.title=T('Kategori')+': '+nm;p.catLabel=nm;
+        if(!nm)return fail('Usulan tanpa judul.');
+        if(catByName(nm))return fail('Kategori itu sudah ada');
+        return;
+      }
+      if(!cur)return fail('Kategori "{c}" tidak ditemukan.',{c:a.kategori||''});
+      p.catId=cur.id;p.title=T('Kategori')+': '+catName(cur);
+      if(p.op==='ubah'){
+        if(!name||name===catName(cur))return fail('Tidak ada yang berubah dari kegiatan ini.');
+        if(catByName(name))return fail('Kategori itu sudah ada');
+        p.catLabel=name;
+      }
+      return;
+    }
+    const catHit=catByName(a.kategori),catId=catHit?.id;
+    if(a.kategori&&!catHit){p.newCat=a.kategori.trim();p.warn.push({k:'Kategori baru "{c}" akan dibuat.',v:{c:p.newCat}})}
     if(a.op==='tambah'){
       // a weekly series that names its weekdays but forgot the date: start at the first matching day from today
       if(!a.tanggal&&a.ulangi&&(a.hari||[]).length){
         const want=new Set(a.hari.map(dowOf).filter(x=>x!==undefined));
         for(let i=0;i<7&&!a.tanggal;i++){const d=addDays(midnight(now),i);if(want.has(d.getDay()))a.tanggal=ymd(d)}
+      }
+      if(a.tanggal&&a.ulangi&&(a.hari||[]).length){
+        const want=new Set(a.hari.map(dowOf).filter(x=>x!==undefined));
+        if(want.size&&!want.has(parse(a.tanggal).getDay()))for(let i=1;i<7;i++){const d=addDays(parse(a.tanggal),i);if(want.has(d.getDay())){a.tanggal=ymd(d);break}}
       }
       if(!a.judul)return fail('Usulan tanpa judul.');
       if(!a.tanggal)return fail(a.ulangi?'Usulan berulang tanpa tanggal mulai atau hari. Coba sebutkan harinya, mis. "tiap Senin".':'Usulan tanpa tanggal.');
@@ -960,6 +983,7 @@ function buildProposals(raw){
     if(a.selesai&&a.selesai!==ev.end)patch.end=a.selesai;
     if(patch.start&&!patch.end&&!a.selesai&&ev.start&&ev.end){const e2=clockAfter(patch.start,dur(ev));if(e2)patch.end=e2} // moved start only: keep the duration
     if(catId!==undefined&&catId!==ev.cat)patch.cat=catId;
+    if(p.newCat)patch.cat=''; // filled with the new category's id on approval
     if(a.status&&a.status!==ev.status)patch.status=a.status;
     if(a.catatan!==undefined&&a.catatan!==(ev.notes||''))patch.notes=a.catatan;
     if(ev.repeat&&a.sampai&&a.sampai!==ev.repeat.until){if(a.sampai<ev.date)return fail('Aturan pengulangan tidak valid (pilih hari, atau tanggal akhir sebelum tanggal mulai).');patch.repeat={...ev.repeat,until:a.sampai}}
@@ -971,7 +995,7 @@ function buildProposals(raw){
   // overlap warnings, ignoring events that are being deleted in the same batch
   const gone=new Set(out.filter(p=>p.op==='hapus'&&p.id).map(p=>p.id));
   out.forEach(p=>{
-    if(!p.next||p.status==='invalid'||p.next.status==='batal'||p.next.repeat||!(p.next.start&&p.next.end))return;
+    if(p.catOp||!p.next||p.status==='invalid'||p.next.status==='batal'||p.next.repeat||!(p.next.start&&p.next.end))return;
     events().filter(e=>e.id!==p.next.id&&!gone.has(e.id)&&e.date===p.next.date&&active(e)&&e.start&&e.end&&mins(e.start)<mins(p.next.end)&&mins(p.next.start)<mins(e.end))
       .slice(0,2).forEach(e=>p.warn.push({k:'Bentrok dengan "{t}" ({s}–{e}).',v:{t:e.title,s:e.start,e:e.end}}));
   });
@@ -989,7 +1013,7 @@ function rescueActions(text){
   const acts=[];
   for(const a of list.slice(0,20)){
     const op=String(a?.op??'').toLowerCase();
-    if(!['tambah','ubah','hapus'].includes(op))continue;
+    if(!['tambah','ubah','hapus','kategori_tambah','kategori_ubah','kategori_hapus'].includes(op))continue;
     const x={op},put=(k,v)=>{if(v!==undefined&&v!=='')x[k]=v};
     put('ref',String(a.ref??a.id??'').replace(/^#/,'').trim());
     put('judul',str(a.judul,120));
@@ -1014,6 +1038,9 @@ function proposalHtml(p,ti){
   const a=(act,label,cls)=>`<button type="button" class="btn small ${cls}" data-aact="${act}" data-aturn="${ti}" data-akey="${p.key}"${p.status==='working'?' disabled':''}>${label}</button>`;
   let body='';
   if(p.status==='invalid')body=`<div class="adet bad">${esc(msgOf(p.error))}</div>`;
+  else if(p.catOp&&p.op==='tambah')body=`<div class="adet">${T('Kategori baru')}</div>`;
+  else if(p.catOp&&p.op==='ubah')body=`<div class="adet"><span class="alab">${T('Nama')}</span><s>${esc(catLabel(p.catId))}</s> → <b>${esc(p.catLabel)}</b></div>`;
+  else if(p.catOp)body=`<div class="adet">${T('{n} kegiatan dipindahkan ke "Tanpa kategori"',{n:real.filter(e=>e.cat===p.catId).length})}</div>`;
   else if(p.op==='tambah')body=`<div class="adet">${esc(whenOf(p.next))}${p.next.cat?' · '+esc(catLabel(p.next.cat)):''}</div>${p.next.repeat?`<div class="adet"><span class="alab">${T('Berulang')}</span>${esc(ruleText(p.next.repeat,p.next.date))}</div>`:''}`;
   else if(p.op==='hapus'&&p.skipDate)body=`<div class="adet">${esc(whenOf({...p.before,date:p.skipDate}))} · ${T('hanya tanggal ini dari seri berulang')}</div>`;
   else if(p.op==='hapus')body=`<div class="adet">${esc(whenOf(p.before))}${p.before.groupId?' · '+T('hanya kegiatan ini, bukan seluruh seri berulang'):p.before.repeat?' · '+T('seluruh seri berulang'):''}</div>`;
@@ -1044,8 +1071,30 @@ async function applyProposals(turn,keys){
   const todo=turn.proposals.filter(p=>keys.includes(p.key)&&p.status==='pending');
   if(!todo.length)return;
   todo.forEach(p=>p.status='working');renderAI();
+  let fail=null;
+  try{
+    for(const p of todo.filter(x=>x.catOp)){
+      p.snapCats=cats.slice();
+      if(p.op==='tambah'){if(!catByName(p.catLabel))await saveCats([...cats,newCatObj(p.catLabel)])}
+      else if(p.op==='ubah')await saveCats(cats.map(c=>c.id===p.catId?{...c,label:p.catLabel}:c));
+      else{
+        const moved=real.filter(e=>e.cat===p.catId);p.movedIds=moved.map(e=>e.id);
+        if(moved.length)await saveMany(moved.map(e=>({...e,cat:''})));
+        await saveCats(cats.filter(c=>c.id!==p.catId));
+      }
+      p.status='applied';
+    }
+    // an event that names a category which does not exist yet: create it now (once per name)
+    for(const p of todo.filter(x=>x.newCat&&!x.catOp)){
+      let c=catByName(p.newCat);
+      if(!c){c=newCatObj(p.newCat);await saveCats([...cats,c])}
+      if(p.next)p.next.cat=c.id;
+      if(p.patch)p.patch.cat=c.id;
+    }
+  }catch(e){fail=e}
   const ups=[],dels=[],upP=[],delP=[];
   for(const p of todo){
+    if(p.catOp||fail)continue;
     if(p.op==='tambah'){ups.push(p.next);upP.push(p);continue}
     const cur=rawEv(p.id); // re-read: the event may have changed since the proposal (a series exists only as its rule in real[])
     if(!cur){p.status='invalid';p.error={k:'Kegiatan ini sudah tidak ada di jadwal.'};continue}
@@ -1054,8 +1103,7 @@ async function applyProposals(turn,keys){
     else if(p.skipDate){ups.push({...cur,repeat:{...cur.repeat,skip:[...(cur.repeat.skip||[]),p.skipDate]}});upP.push(p)} // delete one date of a series
     else{dels.push(cur.id);delP.push(p)}
   }
-  let fail=null;
-  if(ups.length){try{await saveMany(ups);upP.forEach(p=>p.status='applied')}catch(e){fail=e}}
+  if(ups.length&&!fail){try{await saveMany(ups);upP.forEach(p=>p.status='applied')}catch(e){fail=e}}
   if(dels.length&&!fail){try{await removeMany(dels);delP.forEach(p=>p.status='applied')}catch(e){fail=e}}
   todo.forEach(p=>{if(p.status==='working')p.status='pending'});
   renderAI();
@@ -1068,7 +1116,12 @@ async function undoProposal(turn,key){
   if(!p||p.status!=='applied')return;
   p.status='working';renderAI();
   try{
-    if(p.op==='tambah')await removeMany([p.next.id]);
+    if(p.catOp){
+      if(p.movedIds?.length)await saveMany(real.filter(e=>p.movedIds.includes(e.id)).map(e=>({...e,cat:p.catId})));
+      const back=p.snapCats.find(c=>c.id===p.catId);
+      await saveCats(p.op==='tambah'?cats.filter(c=>catName(c)!==p.catLabel):p.op==='ubah'?cats.map(c=>c.id===p.catId?back:c):[...cats,back]);
+    }
+    else if(p.op==='tambah')await removeMany([p.next.id]);
     else await saveMany([p.snapshot]); // ubah and hapus both restore the earlier version
     p.status='pending';toast(T('Perubahan diurungkan'));
   }catch(e){p.status='applied';toast(T('Gagal mengurungkan. {m}',{m:e.message}))}
