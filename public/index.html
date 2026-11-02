@@ -203,8 +203,10 @@
         <label class="f" id="repeatWrap">Ulangi<select id="f-repeat">
           <option value="none">Tidak berulang</option><option value="daily">Setiap hari</option>
           <option value="weekdays">Setiap hari kerja (Sen–Jum)</option>
-          <option value="weekly">Setiap minggu</option><option value="monthly">Setiap bulan</option></select></label>
+          <option value="weekly">Setiap minggu</option><option value="monthly">Setiap bulan</option>
+          <option value="custom">Kustom (pilih hari)</option></select></label>
       </div>
+      <div class="f" id="dowWrap" hidden><span class="flabel">Hari berulang</span><div class="dowpick" id="dowPick"></div></div>
       <div class="fr2" id="untilWrap" hidden>
         <label class="f">Berulang sampai<input id="f-until" type="date"></label>
         <div class="f" style="align-content:end"><span class="reppreview" id="repPreview"></span></div>
