@@ -1,0 +1,17 @@
+{
+  "name": "agenda-saya",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kalender pribadi ala Google Calendar dengan asisten AI (Groq / Gemini), siap deploy ke Vercel.",
+  "scripts": {
+    "dev": "node dev-server.js",
+    "start": "node dev-server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "postgres": "^4.0.0"
+  }
+}
