@@ -180,6 +180,7 @@ const EN = {
   "Hanya tanggal ini": "This date only",
   "Kategori baru \"{c}\" akan dibuat.": "A new category \"{c}\" will be created.",
   "Kategori baru": "New category",
+  "Usulan": "Proposals",
   "Nama": "Name",
   "{n} kegiatan dipindahkan ke \"Tanpa kategori\"": "{n} events move to \"No category\"",
   "Usulan tanpa judul.": "Proposal has no title.",
