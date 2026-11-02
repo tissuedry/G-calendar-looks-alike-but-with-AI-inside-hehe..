@@ -28,7 +28,7 @@ export default route(['GET', 'POST'], async (req, res) => {
   requireAuth(req);
   if (req.method === 'GET') return send(res, 200, { providers: listProviders(), default: defaultProvider() });
 
-  const { system, messages, provider: pref, lang } = await readJson(req);
+  const { system, messages, provider: pref, lang, tools } = await readJson(req);
   const note = NOTE[lang === 'en' ? 'en' : 'id'];
   if (typeof system !== 'string' || !Array.isArray(messages) || !messages.length) throw new HttpError(400, 'Permintaan tidak valid');
   const turns = messages.slice(-MAX_TURNS)
@@ -39,19 +39,40 @@ export default route(['GET', 'POST'], async (req, res) => {
   const ctl = new AbortController();
   res.on('close', () => { if (!res.writableEnded) ctl.abort(); });
 
-  const { response, provider, error } = await openStream([{ role: 'system', content: system.slice(0, MAX_SYSTEM) }, ...turns], ctl.signal, typeof pref === 'string' ? pref : undefined, true);
-  if (error) return send(res, error.status, { error: error.message, code: error.code });
+  const msgs = [{ role: 'system', content: system.slice(0, MAX_SYSTEM) }, ...turns];
+  const provider = typeof pref === 'string' ? pref : undefined;
+  // the browser leaves the schedule tool out for ordinary questions (tools === false)
+  const first = await openStream(msgs, ctl.signal, provider, tools !== false);
+  if (first.error) return send(res, first.error.status, { error: first.error.message, code: first.error.code });
 
-  res.statusCode = 200;
-  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('X-AI-Provider', provider);
-  const emit = o => res.write(JSON.stringify(o) + '\n');
+  // headers go out with the first write. The answer can come from a retry, so they are set lazily.
+  let source = first, started = false;
+  const begin = () => {
+    if (started) return;
+    started = true;
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-AI-Provider', source.provider);
+    res.setHeader('X-AI-Model', source.model);
+  };
+  const emit = o => { begin(); res.write(JSON.stringify(o) + '\n'); };
   try {
     let anyText = false;
-    const { finish, calls } = await pumpStream(response, t => { anyText = true; emit({ type: 'text', text: t }); });
-    const proposals = calls.filter(c => c.name === TOOL_NAME);
-    const actions = proposals.flatMap(c => parseActions(c.args)).slice(0, MAX_ACTIONS);
+    const onText = t => { anyText = true; emit({ type: 'text', text: t }); };
+    let { finish, calls } = await pumpStream(first.response, onText);
+    let proposals = calls.filter(c => c.name === TOOL_NAME);
+    let actions = proposals.flatMap(c => parseActions(c.args)).slice(0, MAX_ACTIONS);
+    if (!actions.length && proposals.length && !anyText) {
+      // The model reached for the schedule tool but gave nothing usable and not a word of text. That is most likely an
+      // ordinary question, so answer it as plain chat instead of showing an error.
+      const again = await openStream(msgs, ctl.signal, provider, false);
+      if (again.response) {
+        source = again;
+        ({ finish, calls } = await pumpStream(again.response, onText));
+        proposals = [];
+      }
+    }
     if (actions.length) emit({ type: 'actions', actions });
     else if (proposals.length) emit({ type: 'text', text: `\n\n*(${note.unreadable})*` });
     // "length" with nothing written means the model spent its whole budget thinking; with some text it was really cut off
@@ -59,5 +80,6 @@ export default route(['GET', 'POST'], async (req, res) => {
   } catch (e) {
     if (!ctl.signal.aborted) emit({ type: 'text', text: `\n\n*(${note.dropped})*` });
   }
+  begin();
   res.end();
 });

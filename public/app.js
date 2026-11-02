@@ -731,7 +731,7 @@ $('aiProv').addEventListener('click',e=>{
 });
 const provName=id=>aiProviders?.find(p=>p.id===id)?.name||id;
 let aiRefs=new Map(); // "#n" shown to the model -> real event id
-function aiContext(){
+function aiContext(withTools=true){
   const en=I18N.lang==='en';
   const ev=events(),from=ymd(addDays(now,-60)),to=ymd(addDays(now,60)),t0=midnight(now);
   const dist=e=>Math.abs(parse(e.date)-t0);
@@ -746,17 +746,26 @@ function aiContext(){
   const next14=[...Array(14)].map((_,i)=>{const d=addDays(t0,i);return `${fWdLong.format(d)} ${ymd(d)}${i===0?` (${en?'today':'hari ini'})`:i===1?` (${en?'tomorrow':'besok'})`:i===2?` (${en?'day after tomorrow':'lusa'})`:''}`}).join(', ');
   const catList=cats.map(catName).join(', ')||(en?'(none)':'(belum ada)');
   const body=lines.join('\n')||(en?'(no events)':'(tidak ada kegiatan)');
+  // the tool rules are only sent when the tool is offered; for ordinary questions the model never hears about it
+  const rules=en
+    ?(withTools?`- You CAN propose schedule changes (add/change/delete) through the tool usulkan_perubahan_jadwal. The user will approve or reject each proposal, so never say the schedule has already changed; call it a "proposal".
+- Use the tool ONLY when the user clearly asks to add, change, move or delete an event. For analysis or ordinary questions, answer in text only.
+- If the user pastes notes or a task list and asks for a schedule: create an "add" proposal for every item that has a date. If no time is given, pick a sensible one (e.g. 09:00–10:00) and state that assumption in "alasan". Do not create proposals for items without a date; ask for the date instead. Do not add events that already exist in the data on the same date (check first and say so if it exists), and do not repeat the notes back in your answer. Always propose through the tool; never write JSON inside the text.
+- For change/delete, put the event number from the data in "ref" (e.g. "#12"). For a change, fill in only the fields that change. Do not guess: if it is unclear which event is meant or there are several candidates, ask first.
+- Convert relative dates (tomorrow, next Thursday) to YYYY-MM-DD based on the current time. Use 24-hour HH:MM times. The category must be one of the listed categories.
+- Before calling the tool, first write 1–2 short sentences: what you are proposing, and which items you skipped and why (e.g. no date). Keep each proposal's "alasan" brief; do not repeat the title or date.`:`- You cannot change the schedule in this answer. If the user wants to add, change, move or delete an event, tell them to say so directly (for example: "add a team meeting tomorrow at 10") so you can propose it.`)
+    :(withTools?`- Kamu BISA mengusulkan perubahan jadwal (tambah/ubah/hapus) lewat alat usulkan_perubahan_jadwal. Pengguna akan menyetujui atau menolak tiap usulan, jadi jangan bilang jadwal sudah berubah; sebut sebagai "usulan".
+- Pakai alat HANYA jika pengguna jelas meminta menambah, mengubah, memindahkan, atau menghapus kegiatan. Untuk analisis atau pertanyaan biasa, jawab dengan teks saja.
+- Jika pengguna menempelkan catatan atau daftar tugas dan meminta dibuatkan jadwal: buat usulan "tambah" untuk setiap butir yang ada tanggalnya. Jika jamnya tidak disebut, pilih jam yang masuk akal (mis. 09:00–10:00) dan sebutkan asumsi itu di "alasan". Butir tanpa tanggal jangan dibuatkan usulan; tanyakan tanggalnya. Jangan menambah kegiatan yang sudah ada di data pada tanggal yang sama (cek dulu, beri tahu jika sudah ada), dan jangan mengulang isi catatan di jawabanmu. Selalu usulkan lewat alat; jangan pernah menulis JSON di dalam teks.
+- Untuk ubah/hapus, isi "ref" dengan nomor kegiatan dari data (mis. "#12"). Untuk ubah, isi hanya kolom yang berubah. Jangan menebak: jika kegiatan yang dimaksud tidak jelas atau ada beberapa kemungkinan, tanyakan dulu.
+- Tanggal relatif (besok, lusa, Kamis depan) ubah menjadi YYYY-MM-DD berdasarkan waktu sekarang. Jam format 24 jam HH:MM. Kategori harus salah satu dari daftar kategori.
+- Sebelum memanggil alat, tulis 1–2 kalimat singkat lebih dulu: apa yang kamu usulkan, dan butir mana yang dilewati beserta alasannya (mis. tanpa tanggal). Isi "alasan" tiap usulan cukup singkat, jangan mengulang judul atau tanggal.`:`- Kamu tidak bisa mengubah jadwal pada jawaban ini. Jika pengguna ingin menambah, mengubah, memindahkan, atau menghapus kegiatan, minta mereka menuliskannya langsung (mis. "tambahkan rapat tim besok jam 10") supaya kamu bisa mengusulkannya.`);
   if(en)return `You are a personal schedule assistant in the app "My Agenda". Reply in English, in a friendly but clear, concise and practical way.
 Rules:
 - Use ONLY the event data below. If the data is not enough to answer, say so plainly.
 - Calculate hours carefully from the start-end times. Events with status Cancelled do not count as time spent.
 - Format: short paragraphs and bullet points starting with "- ". You may use **bold** and "### " subheadings. Do not use tables.
-- You CAN propose schedule changes (add/change/delete) through the tool usulkan_perubahan_jadwal. The user will approve or reject each proposal, so never say the schedule has already changed; call it a "proposal".
-- Use the tool ONLY when the user clearly asks to add, change, move or delete an event. For analysis or ordinary questions, answer in text only.
-- If the user pastes notes or a task list and asks for a schedule: create an "add" proposal for every item that has a date. If no time is given, pick a sensible one (e.g. 09:00–10:00) and state that assumption in "alasan". Do not create proposals for items without a date; ask for the date instead. Do not add events that already exist in the data on the same date (check first and say so if it exists), and do not repeat the notes back in your answer. Always propose through the tool; never write JSON inside the text.
-- For change/delete, put the event number from the data in "ref" (e.g. "#12"). For a change, fill in only the fields that change. Do not guess: if it is unclear which event is meant or there are several candidates, ask first.
-- Convert relative dates (tomorrow, next Thursday) to YYYY-MM-DD based on the current time. Use 24-hour HH:MM times. The category must be one of the listed categories.
-- Before calling the tool, first write 1–2 short sentences: what you are proposing, and which items you skipped and why (e.g. no date). Keep each proposal's "alasan" brief; do not repeat the title or date.
+${rules}
 
 Current time: ${fDay.format(now)}, ${clock}. Today's date (ISO): ${ymd(now)}.
 This week: ${rangeLabel(ws,addDays(ws,6))} (Monday–Sunday).
@@ -770,12 +779,7 @@ Aturan:
 - Gunakan HANYA data kegiatan di bawah. Jika data tidak cukup untuk menjawab, katakan terus terang.
 - Hitung jam dengan teliti dari jam mulai-selesai. Kegiatan berstatus Dibatalkan tidak dihitung sebagai waktu terpakai.
 - Format: paragraf pendek dan poin berawalan "- ". Boleh **tebal** dan subjudul "### ". Jangan pakai tabel.
-- Kamu BISA mengusulkan perubahan jadwal (tambah/ubah/hapus) lewat alat usulkan_perubahan_jadwal. Pengguna akan menyetujui atau menolak tiap usulan, jadi jangan bilang jadwal sudah berubah; sebut sebagai "usulan".
-- Pakai alat HANYA jika pengguna jelas meminta menambah, mengubah, memindahkan, atau menghapus kegiatan. Untuk analisis atau pertanyaan biasa, jawab dengan teks saja.
-- Jika pengguna menempelkan catatan atau daftar tugas dan meminta dibuatkan jadwal: buat usulan "tambah" untuk setiap butir yang ada tanggalnya. Jika jamnya tidak disebut, pilih jam yang masuk akal (mis. 09:00–10:00) dan sebutkan asumsi itu di "alasan". Butir tanpa tanggal jangan dibuatkan usulan; tanyakan tanggalnya. Jangan menambah kegiatan yang sudah ada di data pada tanggal yang sama (cek dulu, beri tahu jika sudah ada), dan jangan mengulang isi catatan di jawabanmu. Selalu usulkan lewat alat; jangan pernah menulis JSON di dalam teks.
-- Untuk ubah/hapus, isi "ref" dengan nomor kegiatan dari data (mis. "#12"). Untuk ubah, isi hanya kolom yang berubah. Jangan menebak: jika kegiatan yang dimaksud tidak jelas atau ada beberapa kemungkinan, tanyakan dulu.
-- Tanggal relatif (besok, lusa, Kamis depan) ubah menjadi YYYY-MM-DD berdasarkan waktu sekarang. Jam format 24 jam HH:MM. Kategori harus salah satu dari daftar kategori.
-- Sebelum memanggil alat, tulis 1–2 kalimat singkat lebih dulu: apa yang kamu usulkan, dan butir mana yang dilewati beserta alasannya (mis. tanpa tanggal). Isi "alasan" tiap usulan cukup singkat, jangan mengulang judul atau tanggal.
+${rules}
 
 Waktu sekarang: ${fDay.format(now)}, pukul ${clock}. Tanggal hari ini (ISO): ${ymd(now)}.
 Minggu ini: ${rangeLabel(ws,addDays(ws,6))} (Senin–Minggu).
@@ -951,7 +955,7 @@ function renderAI(){
   log.innerHTML=aiTurns.map((t,ti)=>{
     if(t.role==='user')return `<div class="msg user${t.shown?'':' new'}">${esc(t.content)}</div>`;
     const props=t.proposals?.length&&!t.pending?proposalsHtml(t,ti):'';
-    const via=t.via&&!t.pending?`<div class="via"><span class="ms">auto_awesome</span>${esc(t.via)}${t.asked&&aiProviders&&t.via!==provName(t.asked)?' · '+esc(T('dialihkan otomatis karena {p} tidak tersedia',{p:provName(t.asked)})):''}</div>`:'';
+    const via=t.via&&!t.pending?`<div class="via"><span class="ms">auto_awesome</span>${esc(t.via)}${t.model?' · '+esc(t.model):''}${t.asked&&aiProviders&&t.via!==provName(t.asked)?' · '+esc(T('dialihkan otomatis karena {p} tidak tersedia',{p:provName(t.asked)})):''}</div>`:'';
     return `<div class="msg bot ${t.error?'err':''}${props?' has-props':''}${t.shown?'':' new'}">${t.pending?`<span class="thinking">${T('Sedang menganalisis…')}</span>`:md(t.content||(props?T('Periksa usulan di bawah, lalu tekan Terapkan.'):''))}${props}${via}</div>`;
   }).join('');
   $('aiChipRow').innerHTML=chipBtns(false);
@@ -959,8 +963,14 @@ function renderAI(){
   renderProv();
 }
 const AI_ERR_KEYS={no_key:'API key AI belum diatur di server. Isi GROQ_API_KEY atau GEMINI_API_KEY.',rate_limited:'Batas pemakaian gratis tercapai. Coba lagi beberapa saat lagi.',too_large:'Data jadwal terlalu besar untuk model ini. Coba pertanyaan yang lebih spesifik.',bad_key:'API key AI ditolak. Periksa kembali key-nya di pengaturan server.',unauthorized:'Sesi berakhir. Silakan masuk lagi.'};
-async function askAI(text){
+// Does the message ask to add / change / move / delete something (or paste a list to schedule)? Only then is the
+// schedule tool offered to the model; for ordinary questions it is left out so it cannot be misused.
+const CHANGE_RE=/\b(tambah\w*|bikin\w*|buatkan|buat\s+(?:jadwal|kegiatan|acara|rapat|agenda|event|pengingat)|jadwalkan|masukkan|catat\w*|pindah\w*|geser\w*|ubah|ganti\w*|edit|hapus\w*|batalkan|undur\w*|majukan|atur(?:kan)?|add|create|schedule\s+(?:a|an|the|my|me)|book|move|reschedule|change|update|delete|remove|cancel|postpone|shift)\b/i;
+const wantsChange=s=>CHANGE_RE.test(s)||/\b\d{1,2}[:.]\d{2}\b|\b(?:jam|pukul|at)\s*\d{1,2}\b/i.test(s)||s.length>300||/\n\s*[*•-]\s/.test(s);
+async function askAI(text,opts={}){
   if(aiBusy||!text.trim())return;
+  const lastBot=[...aiTurns].reverse().find(t=>t.role==='assistant');
+  const useTools=opts.tools??(wantsChange(text)||!!lastBot?.proposals?.length); // a follow-up to proposals ("yang pertama saja") keeps the tool
   aiTurns.push({role:'user',content:text});
   const reply={role:'assistant',content:'',pending:true,asked:aiProv};aiTurns.push(reply);
   aiBusy=true;$('aiStop').hidden=false;$('aiSend').disabled=true;renderAI();
@@ -971,10 +981,10 @@ async function askAI(text){
   const bubble=()=>$('aiLog').lastElementChild;
   bubble()?.scrollIntoView({block:'end'});
   try{
-    const context=aiContext(); // also rebuilds the #ref -> event id map used by buildProposals
-    const r=await fetch('/api/ai',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:context,messages:hist,provider:aiProv||undefined,lang:I18N.lang}),signal:aiCtl.signal});
+    const context=aiContext(useTools); // also rebuilds the #ref -> event id map used by buildProposals
+    const r=await fetch('/api/ai',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:context,messages:hist,provider:aiProv||undefined,lang:I18N.lang,tools:useTools}),signal:aiCtl.signal});
     if(!r.ok){let d={};try{d=await r.json()}catch(e){}if(r.status===401)showLogin();const er=new Error(d.error?TS(d.error):T('Terjadi gangguan ({n}).',{n:r.status}));er.code=d.code;throw er}
-    reply.via=r.headers.get('X-AI-Provider')||'';
+    reply.via=r.headers.get('X-AI-Provider')||'';reply.model=r.headers.get('X-AI-Model')||'';
     const onLine=line=>{
       let o;try{o=JSON.parse(line)}catch(e){return}
       if(o.type==='text'){reply.content+=o.text;reply.pending=false;const b=bubble();if(b){b.innerHTML=md(reply.content);b.scrollIntoView({block:'nearest'})}}
@@ -1015,7 +1025,7 @@ $('aiInput').addEventListener('input',e=>{e.target.style.height='auto';e.target.
 $('aiStop').onclick=()=>aiCtl?.abort();
 $('aiReset').onclick=()=>{if(aiBusy)aiCtl?.abort();aiTurns=[];renderAI()};
 $('aiPanel').addEventListener('click',e=>{
-  const b=e.target.closest('[data-chip]');if(b){askAI(T(AI_CHIPS[+b.dataset.chip].p));return}
+  const b=e.target.closest('[data-chip]');if(b){askAI(T(AI_CHIPS[+b.dataset.chip].p),{tools:false});return}
   const ab=e.target.closest('[data-aact]');if(!ab)return;
   const turn=aiTurns[+ab.dataset.aturn];if(!turn?.proposals)return;
   const act=ab.dataset.aact,key=ab.dataset.akey;

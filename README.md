@@ -111,9 +111,9 @@ Salin [`.env.example`](.env.example) menjadi `.env`. File `.env` tidak ikut ke G
 | `AUTH_SECRET` | Disarankan | String acak panjang untuk menandatangani cookie sesi (`openssl rand -hex 32`). |
 | `AI_PROVIDER` | Tidak | `groq` (default) atau `gemini`. Pengguna bisa menggantinya lewat tombol di panel Asisten. |
 | `GROQ_API_KEY` | Salah satu AI | Dari [console.groq.com/keys](https://console.groq.com/keys). |
-| `GROQ_MODEL` | Tidak | Default `llama-3.3-70b-versatile`. |
+| `GROQ_MODEL` | **Tidak perlu** | Opsional. Isi satu model (atau beberapa dipisah koma) hanya jika ingin model itu dicoba lebih dulu. Daftar bawaan di kode: `openai/gpt-oss-120b`, `openai/gpt-oss-20b`. |
 | `GEMINI_API_KEY` | Salah satu AI | Dari [aistudio.google.com/apikey](https://aistudio.google.com/apikey). |
-| `GEMINI_MODEL` | Tidak | Default `gemini-3.5-flash-lite`. Tiap model punya batas gratis sendiri (beberapa hanya belasan permintaan per hari, cek di [ai.dev/rate-limit](https://ai.dev/rate-limit)); model seri 2.5 sudah tidak tersedia untuk pengguna baru. |
+| `GEMINI_MODEL` | **Tidak perlu** | Opsional, sama seperti `GROQ_MODEL`. Daftar bawaan di kode: `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.5-flash`, `gemini-3.6-flash`. |
 | `PORT` | Tidak | Hanya untuk server lokal (default 3000). |
 
 ## Deploy ke Vercel
@@ -124,7 +124,7 @@ Salin [`.env.example`](.env.example) menjadi `.env`. File `.env` tidak ikut ke G
    - **Build Command** dan **Output Directory:** biarkan kosong/default ([`vercel.json`](vercel.json) sudah mengaturnya).
 3. Buka **Settings → Environment Variables** dan isi, minimal:
    - `DATABASE_URL`, `APP_USERNAME`, `APP_PASSWORD`, `AUTH_SECRET`
-   - `GROQ_API_KEY` dan/atau `GEMINI_API_KEY` (beserta `GROQ_MODEL` / `GEMINI_MODEL` jika ingin model lain)
+   - `GROQ_API_KEY` dan/atau `GEMINI_API_KEY` (hanya key; nama model tidak perlu diisi)
 4. **Deploy**. Setiap kali Anda mengubah environment variable, lakukan **Redeploy** agar terbaca.
 5. Pastikan [migrasi Supabase](#menyiapkan-supabase) sudah dijalankan.
 
@@ -155,7 +155,9 @@ AI tidak punya jalan untuk menulis ke database sendiri. Setiap kartu bisa ditera
 
 Batas gratis sering berubah, jadi cek halaman limit resmi masing-masing ([Groq](https://console.groq.com/docs/rate-limits), [Google AI Studio](https://ai.google.dev/gemini-api/docs/rate-limits)). Isi kedua key agar ada cadangan otomatis. Perlu diingat: daftar kegiatan Anda dikirim ke penyedia AI yang dipilih, jadi tinjau kebijakan data masing-masing, terutama untuk paket gratis.
 
-Prompt memuat maksimal 250 kegiatan terdekat (60 hari ke belakang dan ke depan) supaya tetap muat di batas token paket gratis.
+Prompt memuat kegiatan terdekat (60 hari ke belakang dan ke depan), maksimal 100 untuk Groq dan 250 untuk Gemini, supaya tetap muat di batas token paket gratis masing-masing.
+
+**Model cadangan otomatis.** Batas gratis berlaku **per model**, jadi di dalam kode ([`lib/ai.js`](lib/ai.js)) setiap penyedia punya daftar model berurutan. Kalau satu model kena limit, sudah dihentikan, atau tidak menjawab dalam 15 detik, asisten langsung mencoba model berikutnya (lalu penyedia lain). Model yang baru gagal dilewati sementara supaya tidak membuang permintaan di setiap pertanyaan. Di bawah jawaban tertera model yang dipakai. Anda tidak perlu mengisi nama model di mana pun; `GROQ_MODEL` / `GEMINI_MODEL` hanya untuk menaruh model pilihan sendiri di urutan pertama.
 
 ## Struktur proyek
 
