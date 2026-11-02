@@ -297,11 +297,13 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 .count.soon{color:var(--accent);font-weight:500}
 .weeknav{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:12px}
 .weeknav .range{font-weight:500;margin-right:auto;font-size:.92rem}
-.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:end}
-.wday{display:grid;gap:6px;text-align:center;font-size:.78rem;color:var(--muted);background:none;border:0;padding:0}
-.wday .col{height:120px;background:var(--surface-2);border-radius:8px;display:flex;flex-direction:column-reverse;overflow:hidden}
+.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;align-items:stretch}
+/* fixed rows (hours / bar / label) so every day lines up even when a label is longer in one column */
+.wday{--bar-h:120px;display:grid;grid-template-rows:1.3em var(--bar-h) 1.3em;align-content:start;gap:6px;text-align:center;font-size:.78rem;color:var(--muted);background:none;border:0;padding:0;min-width:0}
+.wday .col{height:auto;min-height:0;background:var(--surface-2);border-radius:8px;display:flex;flex-direction:column-reverse;overflow:hidden}
 .wday .col i{display:block;width:100%}
-.wday .hrs{font-size:.76rem;color:var(--ink)}
+.wday .hrs{font-size:.76rem;color:var(--ink);line-height:1.3em}
+.wday .dn{line-height:1.3em;white-space:nowrap;overflow:hidden;text-overflow:clip;font-size:.74rem}
 .wday.today .dn{color:var(--accent);font-weight:500}
 .legend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:12px;font-size:.8rem;color:var(--muted)}
 
@@ -497,7 +499,7 @@ body.ai-resizing{cursor:col-resize;user-select:none}
   .fr{grid-template-columns:1fr 1fr}
   .fr .date{grid-column:1/-1}
   .modal{padding:16px 18px 20px;border-radius:20px}
-  .wday .col{height:96px}
+  .wday{--bar-h:96px}
 }
 @media (prefers-reduced-motion:no-preference){
   .meter i,.catrow .fill,.wday .col i{transition:height .3s,width .3s}
