@@ -329,16 +329,19 @@ function closeDay(){$('dayOv').hidden=true;openDayStr=null}
 
 /* ---------- schedule ---------- */
 function renderList(){
-  const fcSel=$('fcat'),prev=fcSel.value;
-  fcSel.innerHTML=`<option value="">${T('Semua kategori')}</option>`+cats.map(c=>`<option value="${esc(c.id)}">${esc(catName(c))}</option>`).join('')+`<option value="__none">${T('Tanpa kategori')}</option>`;
-  fcSel.value=[...fcSel.options].some(o=>o.value===prev)?prev:'';
-  const q=$('fq').value.trim().toLowerCase(),per=$('fperiod').value,fc=fcSel.value,fs=$('fstatus').value;
+  const fcBox=$('fcat'),checked=v=>new Set([...v.querySelectorAll('input:checked')].map(i=>i.value));
+  const prev=checked(fcBox),opts=[...cats.map(c=>[c.id,catName(c)]),['__none',T('Tanpa kategori')]];
+  const sig=JSON.stringify(opts);
+  if(fcBox.dataset.sig!==sig){
+    fcBox.dataset.sig=sig;
+    fcBox.innerHTML=opts.map(([id,n])=>`<label class="fchk"><input type="checkbox" value="${esc(id)}"${prev.has(id)?' checked':''}><span>${esc(n)}</span></label>`).join('');
+  }
+  const q=$('fq').value.trim().toLowerCase(),per=$('fperiod').value,fc=checked(fcBox),fs=checked($('fstatus'));
   const today=ymd(now),mPre=today.slice(0,7);
   let ev=events().filter(e=>{
     if(!visible(e))return false;
-    if(fc==='__none'&&getCat(e.cat))return false;
-    if(fc&&fc!=='__none'&&e.cat!==fc)return false;
-    if(fs&&e.status!==fs)return false;
+    if(fc.size&&!fc.has(getCat(e.cat)?e.cat:'__none'))return false;
+    if(fs.size&&!fs.has(e.status))return false;
     if(q&&!(e.title.toLowerCase().includes(q)||(e.notes||'').toLowerCase().includes(q)))return false;
     if(per==='upcoming'&&e.date<today)return false;
     if(per==='past'&&e.date>=today)return false;
@@ -1195,7 +1198,10 @@ const AI_ERR_KEYS={no_key:'API key AI belum diatur di server. Isi GROQ_API_KEY a
 // Does the message ask to add / change / move / delete something (or paste a list to schedule)? Only then is the
 // schedule tool offered to the model; for ordinary questions it is left out so it cannot be misused.
 const CHANGE_RE=/\b(tambah\w*|bikin\w*|buatkan|buat\s+(?:jadwal|kegiatan|acara|rapat|agenda|event|pengingat)|jadwalkan|masukkan|catat\w*|pindah\w*|geser\w*|ubah|ganti\w*|edit|hapus\w*|batalkan|undur\w*|majukan|atur(?:kan)?|add|create|schedule\s+(?:a|an|the|my|me)|book|move|reschedule|change|update|delete|remove|cancel|postpone|shift)\b/i;
-const wantsChange=s=>CHANGE_RE.test(s)||/\b\d{1,2}[:.]\d{2}\b|\b(?:jam|pukul|at)\s*\d{1,2}\b/i.test(s)||s.length>300||/\n\s*[*•-]\s/.test(s);
+// a statement that names a day ("besok kumpulkan laporan") is a change request even without a known verb; a question is not
+const QUESTION_RE=/\?\s*$|^\s*(apa|apakah|siapa|kapan|dimana|di mana|berapa|bagaimana|gimana|mengapa|kenapa|what|which|when|where|who|how|why|is there|are there|do i have)\b|\b(apa saja|hari apa|tanggal berapa|berapa)\b/i;
+const HAS_DATE_RE=/\b(besok|lusa|hari ini|nanti|minggu depan|bulan depan|senin|selasa|rabu|kamis|jumat|jum'at|sabtu|tgl|tanggal\s*\d|\d{1,2}\s*(?:jan|feb|mar|apr|mei|jun|jul|agu|sep|okt|nov|des)\w*|tomorrow|today|next (?:week|month)|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
+const wantsChange=s=>CHANGE_RE.test(s)||(HAS_DATE_RE.test(s)&&!QUESTION_RE.test(s))||/\b\d{1,2}[:.]\d{2}\b|\b(?:jam|pukul|at)\s*\d{1,2}\b/i.test(s)||s.length>300||/\n\s*[*•-]\s/.test(s);
 async function askAI(text,opts={}){
   if(aiBusy||!text.trim())return;
   const lastBot=[...aiTurns].reverse().find(t=>t.role==='assistant');
@@ -1352,8 +1358,7 @@ document.addEventListener('keydown',e=>{
 $('wPrev').onclick=()=>{weekOff--;renderDashboard()};
 $('wNext').onclick=()=>{weekOff++;renderDashboard()};
 $('wNow').onclick=()=>{weekOff=0;renderDashboard()};
-['fq','fperiod','fcat','fstatus'].forEach(id=>$(id).addEventListener('input',renderList));
-mqMobile.addEventListener('change',()=>{closeDrawer();render()});
+['fq','fperiod','fcat','fstatus'].forEach(id=>$(id).addEventListener('input',renderList));mqMobile.addEventListener('change',()=>{closeDrawer();render()});
 window.addEventListener('focus',()=>{if(backend==='api'&&!anyOverlay())loadRemote().catch(()=>{})});
 
 // swipe left/right on the calendar to move to the next/previous period (phones)

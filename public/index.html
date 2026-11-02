@@ -78,11 +78,13 @@
             <option value="upcoming">Mendatang</option><option value="month">Bulan ini</option>
             <option value="past">Sudah lewat</option><option value="all">Semua</option>
           </select>
-          <select id="fcat" aria-label="Kategori"></select>
-          <select id="fstatus" aria-label="Status">
-            <option value="">Semua status</option><option value="rencana">Direncanakan</option>
-            <option value="selesai">Selesai</option><option value="tunda">Ditunda</option><option value="batal">Dibatalkan</option>
-          </select>
+          <div class="fgroup" id="fcat" role="group" aria-label="Kategori"></div>
+          <div class="fgroup" id="fstatus" role="group" aria-label="Status">
+            <label class="fchk"><input type="checkbox" value="rencana"><span>Direncanakan</span></label>
+            <label class="fchk"><input type="checkbox" value="selesai"><span>Selesai</span></label>
+            <label class="fchk"><input type="checkbox" value="tunda"><span>Ditunda</span></label>
+            <label class="fchk"><input type="checkbox" value="batal"><span>Dibatalkan</span></label>
+          </div>
         </div>
         <div id="listOut"></div>
       </section>
