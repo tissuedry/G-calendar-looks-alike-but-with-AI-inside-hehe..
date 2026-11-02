@@ -8,11 +8,28 @@ import { openStream, pumpStream, parseActions, listProviders, defaultProvider, T
 
 const MAX_SYSTEM = 60_000, MAX_MSG = 4_000, MAX_TURNS = 12;
 
+// notes appended to the stream by the server itself, in the language the user picked
+const NOTE = {
+  id: {
+    unreadable: 'AI mencoba mengusulkan perubahan, tapi formatnya tidak terbaca. Coba ulangi dengan kalimat yang lebih jelas.',
+    truncated: 'Jawaban terpotong. Coba minta lebih ringkas.',
+    dropped: 'Koneksi ke AI terputus.',
+    exhausted: 'Model kehabisan batas jawaban sebelum sempat menjawab (biasanya karena jadwal besar). Coba pilih penyedia AI lain atau tanyakan hal yang lebih spesifik.',
+  },
+  en: {
+    unreadable: 'The AI tried to propose changes, but the format could not be read. Try again with a clearer sentence.',
+    truncated: 'The answer was cut off. Try asking for a shorter one.',
+    dropped: 'The connection to the AI was lost.',
+    exhausted: 'The model ran out of its answer budget before it could reply (usually because the schedule is large). Try another AI provider or ask something more specific.',
+  },
+};
+
 export default route(['GET', 'POST'], async (req, res) => {
   requireAuth(req);
   if (req.method === 'GET') return send(res, 200, { providers: listProviders(), default: defaultProvider() });
 
-  const { system, messages, provider: pref } = await readJson(req);
+  const { system, messages, provider: pref, lang } = await readJson(req);
+  const note = NOTE[lang === 'en' ? 'en' : 'id'];
   if (typeof system !== 'string' || !Array.isArray(messages) || !messages.length) throw new HttpError(400, 'Permintaan tidak valid');
   const turns = messages.slice(-MAX_TURNS)
     .filter(m => (m?.role === 'user' || m?.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
@@ -31,14 +48,16 @@ export default route(['GET', 'POST'], async (req, res) => {
   res.setHeader('X-AI-Provider', provider);
   const emit = o => res.write(JSON.stringify(o) + '\n');
   try {
-    const { finish, calls } = await pumpStream(response, t => emit({ type: 'text', text: t }));
+    let anyText = false;
+    const { finish, calls } = await pumpStream(response, t => { anyText = true; emit({ type: 'text', text: t }); });
     const proposals = calls.filter(c => c.name === TOOL_NAME);
     const actions = proposals.flatMap(c => parseActions(c.args)).slice(0, MAX_ACTIONS);
     if (actions.length) emit({ type: 'actions', actions });
-    else if (proposals.length) emit({ type: 'text', text: '\n\n*(AI mencoba mengusulkan perubahan, tapi formatnya tidak terbaca. Coba ulangi dengan kalimat yang lebih jelas.)*' });
-    if (finish === 'length') emit({ type: 'text', text: '\n\n*(Jawaban terpotong. Coba minta lebih ringkas.)*' });
+    else if (proposals.length) emit({ type: 'text', text: `\n\n*(${note.unreadable})*` });
+    // "length" with nothing written means the model spent its whole budget thinking; with some text it was really cut off
+    if (finish === 'length') emit({ type: 'text', text: `\n\n*(${anyText || actions.length ? note.truncated : note.exhausted})*` });
   } catch (e) {
-    if (!ctl.signal.aborted) emit({ type: 'text', text: '\n\n*(Koneksi ke AI terputus.)*' });
+    if (!ctl.signal.aborted) emit({ type: 'text', text: `\n\n*(${note.dropped})*` });
   }
   res.end();
 });

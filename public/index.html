@@ -33,6 +33,7 @@
       <div class="menu" id="viewMenu" role="menu" hidden></div>
     </div>
     <button class="icon-btn ai-toggle" id="aiBtn" aria-label="Asisten AI" title="Asisten AI" aria-pressed="false"><span class="ms">auto_awesome</span></button>
+    <div class="seg langseg" id="langTop" role="group" aria-label="Bahasa"><button type="button" data-lang="id" aria-pressed="true" title="Bahasa Indonesia">ID</button><button type="button" data-lang="en" aria-pressed="false" title="English">EN</button></div>
     <button class="icon-btn" id="catsBtn" aria-label="Kelola kategori" title="Kelola kategori" data-act="cats"><span class="ms">settings</span></button>
     <button class="icon-btn" id="logoutBtn" aria-label="Keluar" title="Keluar" hidden><span class="ms">logout</span></button>
   </header>
@@ -51,7 +52,8 @@
         <div class="side-h"><span>Kategori saya</span><button class="icon-btn sm" data-act="cats" aria-label="Kelola kategori" title="Kelola kategori"><span class="ms">settings</span></button></div>
         <ul class="catvis" id="catVis"></ul>
       </section>
-      <p class="side-foot">Pintasan: <kbd>D</kbd> hari · <kbd>X</kbd> 3 hari · <kbd>W</kbd> minggu · <kbd>M</kbd> bulan · <kbd>A</kbd> jadwal · <kbd>R</kbd> dashboard · <kbd>T</kbd> hari ini · <kbd>C</kbd> buat</p>
+      <div class="side-lang"><span>Bahasa</span><div class="seg langseg" role="group" aria-label="Bahasa"><button type="button" data-lang="id" aria-pressed="true" title="Bahasa Indonesia">ID</button><button type="button" data-lang="en" aria-pressed="false" title="English">EN</button></div></div>
+      <p class="side-foot" id="shortcuts"></p>
     </aside>
     <div class="scrim" id="sideScrim" hidden></div>
 
@@ -190,7 +192,7 @@
       <div class="fr">
         <label class="f date">Tanggal<input id="f-date" type="date"></label>
         <label class="f">Mulai<input id="f-start" type="time"></label>
-        <label class="f">Selesai<input id="f-end" type="time"></label>
+        <label class="f"><span data-i18n="Jam selesai">Selesai</span><input id="f-end" type="time"></label>
       </div>
       <div class="f"><span class="flabel">Kategori <button type="button" class="btn text small" data-act="cats">Kelola kategori</button></span><div class="catpick" id="f-cats"></div></div>
       <div class="fr2">
@@ -254,6 +256,7 @@
 </div>
 
 <div class="toast" id="toast" role="status" hidden></div>
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

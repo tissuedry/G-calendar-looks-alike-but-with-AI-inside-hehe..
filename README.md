@@ -34,6 +34,7 @@ Berjalan gratis di **Vercel** (frontend + API), data di **Supabase** (Postgres),
 - Kegiatan berulang (harian, hari kerja, mingguan, bulanan), status (direncanakan, selesai, ditunda, dibatalkan), catatan dengan link yang bisa diklik.
 - Kategori yang bisa diubah nama dan warnanya, plus filter tampil/sembunyi per kategori.
 - Kalender mini, garis "sekarang", tampilan gelap otomatis mengikuti perangkat.
+- **Dua bahasa: Indonesia dan Inggris.** Ganti lewat tombol **ID | EN** di bar atas (di HP: di menu samping). Pilihan diingat di browser. Semua teks, format tanggal dan angka, jawaban asisten AI, serta pesan error ikut berganti. Judul kegiatan dan nama kategori yang Anda buat sendiri tidak diterjemahkan. Terjemahan Inggris ada di [`public/i18n.js`](public/i18n.js).
 
 **Dashboard**
 - Sapaan dan ringkasan hari ini, kartu statistik (hari ini, minggu ini, bulan ini, tingkat terlaksana, 14 hari ke depan).
@@ -112,7 +113,7 @@ Salin [`.env.example`](.env.example) menjadi `.env`. File `.env` tidak ikut ke G
 | `GROQ_API_KEY` | Salah satu AI | Dari [console.groq.com/keys](https://console.groq.com/keys). |
 | `GROQ_MODEL` | Tidak | Default `llama-3.3-70b-versatile`. |
 | `GEMINI_API_KEY` | Salah satu AI | Dari [aistudio.google.com/apikey](https://aistudio.google.com/apikey). |
-| `GEMINI_MODEL` | Tidak | Default `gemini-2.5-flash`. |
+| `GEMINI_MODEL` | Tidak | Default `gemini-3.5-flash-lite`. Tiap model punya batas gratis sendiri (beberapa hanya belasan permintaan per hari, cek di [ai.dev/rate-limit](https://ai.dev/rate-limit)); model seri 2.5 sudah tidak tersedia untuk pengguna baru. |
 | `PORT` | Tidak | Hanya untuk server lokal (default 3000). |
 
 ## Deploy ke Vercel
@@ -161,7 +162,7 @@ Prompt memuat maksimal 250 kegiatan terdekat (60 hari ke belakang dan ke depan) 
 ```
 api/        auth.js  state.js  events.js  cats.js  ai.js     Vercel Serverless Functions
 lib/        http.js  auth.js   store.js   ai.js               logika bersama
-public/     index.html  style.css  app.js  favicon.svg        frontend (tanpa build)
+public/     index.html  style.css  app.js  i18n.js  favicon.svg  frontend (tanpa build; i18n.js = kamus Indonesia/Inggris)
 supabase/   migrations/*.sql                                   skema database
 docs/       screenshots/                                       gambar untuk README
 dev-server.js                                                  server lokal yang meniru Vercel
