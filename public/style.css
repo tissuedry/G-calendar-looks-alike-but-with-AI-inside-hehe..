@@ -608,6 +608,7 @@ button{touch-action:manipulation}
 .acard.applied{border-color:color-mix(in srgb,var(--ok) 55%,var(--line))}
 .acard.rejected{opacity:.55}
 .acard.invalid{border-style:dashed}
+.acard.clash{border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}
 .ahead{display:flex;align-items:center;gap:8px;min-width:0}
 .aop{font-size:.7rem;font-weight:500;padding:1px 9px;border-radius:999px;flex:none}
 .aop.tambah{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}

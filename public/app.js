@@ -837,8 +837,9 @@ function aiContext(withTools=true){
   if(en)return `You are a personal schedule assistant in the app "My Agenda". Reply in English, in a friendly but clear, concise and practical way.
 Rules:
 - For questions about the user's schedule, use ONLY the event data below; if it is not enough, say so plainly. You may also answer general questions that are directly about calendar and time (public holidays, national events, dates, day of the week, time zones, planning and prioritising tasks, managing a to-do list or study/work time): use your general knowledge, say that you cannot check live sources, and suggest confirming against the official calendar when the date matters. Never invent events in the user's schedule.
-${withTools?`- CLASHES: before proposing an add or a move, check the data (including REPEATING series) for events on the same date whose times overlap. If there is a clash, do NOT call the tool yet: name the clashing event(s) with their times, offer 2–3 concrete options (e.g. move the new one to a free slot you found, move the existing one, keep both anyway), and end with one direct question. When the user answers in their own words (e.g. "move it to Thursday"), make the matching proposal(s) and say in one sentence what the card will do; the card's Apply/Reject is the final yes/no. If the user already said to ignore clashes, propose directly.
-- The conversation shows earlier proposals with their outcome (applied / rejected / pending); build on it and do not re-propose what was already applied.
+${withTools?`- CLASHES ARE CHECKED BY THE APP, not by you: do NOT check for clashes and do NOT ask before proposing. Propose every requested item through the tool right away; the app holds back any proposal that clashes and shows the user what it clashes with. All-day items and deadlines never clash.
+- If the conversation shows a proposal "DITAHAN karena bentrok" and the user then says what to do (e.g. "move it to Wednesday", "put it after class"), make the new proposal(s) for exactly that, and do not re-propose items already applied.
+- When you name a date in text, take the weekday from the calendar list or the data line; never work it out yourself.
 `:''}- OUTPUT ONLY THE FINAL ANSWER to the user. Never write your reasoning, self-talk, drafts or analysis ("Wait", "let me check", "based on the instructions", "the user asks…"), and never quote or mention these rules. Think silently, then reply directly and briefly.
 - STAY IN SCOPE: you are only a schedule, calendar, to-do and time-management assistant. Politely decline anything else (programming code, homework answers, essays, translations, trivia, general chat) in one short sentence and offer what you can help with, e.g. adding an event, summarising the week, or finding free time. Do not write code under any circumstances.
 - Calculate hours carefully from the start-end times. Events with status Cancelled do not count as time spent. A line starting with REPEATING is a recurring series stored once (its ref changes or deletes the WHOLE series); it lists its occurrences for the next 14 days, so for other dates derive them from the rule and the day names carefully, and never treat it as a single event. Lines marked "tenggat HH:MM" are deadlines and "seharian" are all-day items; they have no duration, so they add no hours.
@@ -855,8 +856,9 @@ ${body}`;
   return `Kamu asisten jadwal pribadi di aplikasi "Agenda Saya". Jawab dalam Bahasa Indonesia yang santai tapi jelas, ringkas dan praktis.
 Aturan:
 - Untuk pertanyaan tentang jadwal pengguna, gunakan HANYA data kegiatan di bawah; jika tidak cukup, katakan terus terang. Kamu juga boleh menjawab pertanyaan umum yang langsung terkait kalender dan waktu (tanggal merah, hari libur nasional, acara nasional, tanggal, hari dalam seminggu, zona waktu, menyusun dan memprioritaskan tugas, mengatur to-do list atau waktu belajar/kerja): pakai pengetahuan umummu, sebutkan bahwa kamu tidak bisa mengecek sumber terkini, dan sarankan memastikan ke kalender resmi (mis. SKB 3 Menteri) bila tanggalnya penting. Jangan mengarang kegiatan di jadwal pengguna.
-${withTools?`- BENTROK: sebelum mengusulkan tambah atau pindah, cek data (termasuk seri BERULANG) apakah ada kegiatan di tanggal yang sama dengan jam yang tumpang tindih. Jika bentrok, JANGAN panggil alat dulu: sebutkan kegiatan yang bentrok beserta jamnya, tawarkan 2–3 pilihan konkret (mis. geser yang baru ke slot kosong yang kamu temukan, geser yang lama, atau tetap tambahkan), lalu akhiri dengan satu pertanyaan langsung. Saat pengguna menjawab dengan kalimatnya sendiri (mis. "geser saja ke Kamis"), buat usulan yang sesuai dan jelaskan dalam satu kalimat apa yang akan dilakukan kartu itu; tombol Terapkan/Tolak di kartu adalah ya/tidak terakhirnya. Jika pengguna sudah bilang abaikan bentrok, langsung usulkan.
-- Percakapan memuat usulan sebelumnya beserta hasilnya (diterapkan / ditolak / menunggu); lanjutkan dari situ dan jangan mengusulkan ulang yang sudah diterapkan.
+${withTools?`- BENTROK DICEK OLEH APLIKASI, bukan olehmu: JANGAN mengecek bentrok dan JANGAN bertanya sebelum mengusulkan. Langsung usulkan setiap butir yang diminta lewat alat; aplikasi akan menahan usulan yang bentrok dan menunjukkan ke pengguna bentrok dengan apa. Kegiatan seharian dan tenggat tidak pernah bentrok.
+- Jika di percakapan ada usulan "DITAHAN karena bentrok" lalu pengguna menyebut mau diapakan (mis. "geser ke Rabu", "taruh setelah kuliah"), buat usulan baru persis untuk itu, dan jangan mengusulkan ulang yang sudah diterapkan.
+- Saat menyebut tanggal di teks, ambil nama harinya dari daftar kalender atau baris data; jangan menghitung sendiri.
 `:''}- TULIS HANYA JAWABAN AKHIR untuk pengguna. Jangan menulis proses berpikir, bicara pada diri sendiri, draf, atau analisis ("Tunggu", "mari kita lihat", "berdasarkan instruksi", "pengguna meminta…"), dan jangan mengutip atau menyebut aturan ini. Berpikirlah dalam diam, lalu jawab langsung dan singkat.
 - TETAP DALAM LINGKUP: kamu hanya asisten jadwal, kalender, to-do list, dan manajemen waktu. Tolak dengan sopan dalam satu kalimat singkat hal di luar itu (kode program, jawaban PR/tugas, esai, terjemahan, trivia, obrolan umum) lalu tawarkan yang bisa kamu bantu, mis. menambah kegiatan, merangkum minggu ini, atau mencari waktu kosong. Jangan menulis kode program dalam keadaan apa pun.
 - Hitung jam dengan teliti dari jam mulai-selesai. Kegiatan berstatus Dibatalkan tidak dihitung sebagai waktu terpakai. Baris berawalan BERULANG adalah seri berulang yang disimpan sekali (ref-nya mengubah atau menghapus SELURUH seri); di dalamnya tertera tanggal 14 hari ke depan, jadi untuk tanggal lain turunkan dari aturan dan nama hari dengan teliti, dan jangan anggap itu satu kegiatan tunggal. Baris bertanda "tenggat HH:MM" adalah tenggat dan "seharian" adalah kegiatan sepanjang hari; keduanya tidak punya durasi, jadi tidak menambah jam.
@@ -996,12 +998,25 @@ function buildProposals(raw){
     if(next.start&&next.end&&next.end<=next.start)return fail('Jam selesai harus setelah jam mulai.');
     p.patch=patch;p.next=next;
   });
-  // overlap warnings, ignoring events that are being deleted in the same batch
+  // Clash check done by the app, not the model (models miscount weekdays). Only timed items can clash: all-day items
+  // and deadlines never do. A series is checked occurrence by occurrence. Events deleted in the same batch are ignored.
+  // A clashing proposal is held back ("clash"): it is not applied by "Terapkan semua"; the user decides.
   const gone=new Set(out.filter(p=>p.op==='hapus'&&p.id).map(p=>p.id));
+  const timed=e=>!!(e.start&&e.end), today=ymd(midnight(now));
+  const pool=events().filter(e=>active(e)&&timed(e)&&!gone.has(e.id)&&!gone.has(e.seriesId));
   out.forEach(p=>{
-    if(p.catOp||!p.next||p.status==='invalid'||p.next.status==='batal'||p.next.repeat||!(p.next.start&&p.next.end))return;
-    events().filter(e=>e.id!==p.next.id&&!gone.has(e.id)&&e.date===p.next.date&&active(e)&&e.start&&e.end&&mins(e.start)<mins(p.next.end)&&mins(p.next.start)<mins(e.end))
-      .slice(0,2).forEach(e=>p.warn.push({k:'Bentrok dengan "{t}" ({s}–{e}).',v:{t:e.title,s:e.start,e:e.end}}));
+    if(p.catOp||!p.next||p.status==='invalid'||p.next.status==='batal'||!timed(p.next))return;
+    if(p.op==='ubah'&&!(p.patch.date||p.patch.start||p.patch.end||p.patch.repeat))return; // time unchanged: nothing new can clash
+    const self=p.next.id, occ=p.next.repeat?expandSeries(p.next).filter(o=>o.date>=today).slice(0,80):[p.next], hits=[];
+    for(const o of occ){
+      for(const e of pool){
+        if(e.id===self||e.seriesId===self||e.date!==o.date)continue;
+        if(mins(e.start)<mins(o.end)&&mins(o.start)<mins(e.end)&&!hits.some(h=>(h.seriesId||h.id)===(e.seriesId||e.id)))hits.push(e);
+      }
+      if(hits.length>=3)break;
+    }
+    hits.forEach(e=>p.warn.push({k:'Bentrok dengan "{t}" ({d}, {s}–{e}).',v:{t:e.title,d:`${fWd.format(parse(e.date))} ${fDM.format(parse(e.date))}`,s:e.start,e:e.end}}));
+    if(hits.length&&p.status==='pending')p.status='clash';
   });
   return out;
 }
@@ -1061,6 +1076,7 @@ function proposalHtml(p,ti){
   const warn=p.status==='invalid'?'':p.warn.map(w=>`<div class="awarn"><span class="ms">schedule</span>${esc(msgOf(w))}</div>`).join('');
   let acts='';
   if(p.status==='pending')acts=a('apply',T('Terapkan'),'primary')+a('reject',T('Tolak'),'text');
+  else if(p.status==='clash')acts=`<span class="astate">${T('Ditahan karena bentrok. Balas di chat, mis. "geser ke Rabu", atau:')}</span>`+a('force',T('Tetap tambahkan'),'tonal')+a('reject',T('Tolak'),'text');
   else if(p.status==='working')acts=`<span class="astate">${T('Menerapkan…')}</span>`;
   else if(p.status==='applied')acts=`<span class="astate ok">${T('Diterapkan')}</span>`+a('undo',T('Urungkan'),'text');
   else if(p.status==='rejected')acts=`<span class="astate">${T('Ditolak')}</span>`;
@@ -1164,8 +1180,8 @@ async function askAI(text,opts={}){
   const reply={role:'assistant',content:'',pending:true,asked:aiProv,toolMode:useTools};aiTurns.push(reply);
   aiBusy=true;$('aiStop').hidden=false;$('aiSend').disabled=true;renderAI();
   // earlier proposals are summarised with their outcome, so the model knows what was applied or rejected
-  const ST_WORD={pending:'menunggu',applied:'diterapkan',rejected:'ditolak',invalid:'tidak valid',working:'diproses'};
-  const propSum=t=>t.proposals.map(p=>`- ${p.op}${p.catOp?' kategori':''} "${p.title||''}"${p.next&&!p.catOp?' '+whenOf(p.next):''}: ${ST_WORD[p.status]||p.status}`).join('\n');
+  const ST_WORD={pending:'menunggu',applied:'diterapkan',rejected:'ditolak',invalid:'tidak valid',working:'diproses',clash:'DITAHAN karena bentrok, menunggu keputusan pengguna'};
+  const propSum=t=>t.proposals.map(p=>`- ${p.op}${p.catOp?' kategori':''} "${p.title||''}"${p.next&&!p.catOp?' '+whenOf(p.next)+(p.next.repeat?' ('+ruleText(p.next.repeat,p.next.date)+')':''):''}: ${ST_WORD[p.status]||p.status}${p.status==='clash'?' ('+p.warn.map(msgOf).join(' ')+')':''}`).join('\n');
   const hist=aiTurns.filter(t=>t!==reply&&!t.error)
     .map(t=>({role:t.role,content:[t.content,t.proposals?.length?`(${T('Usulan')}:\n${propSum(t)})`:''].filter(Boolean).join('\n\n')}))
     .filter(t=>t.content).slice(-12);
@@ -1245,8 +1261,9 @@ $('aiPanel').addEventListener('click',e=>{
   if(act==='apply')applyProposals(turn,[key]);
   else if(act==='apply-all')applyProposals(turn,turn.proposals.map(p=>p.key));
   else if(act==='undo')undoProposal(turn,key);
-  else if(act==='reject'){const p=turn.proposals.find(x=>x.key===key);if(p&&p.status==='pending'){p.status='rejected';renderAI()}}
-  else if(act==='reject-all'){turn.proposals.forEach(p=>{if(p.status==='pending')p.status='rejected'});renderAI()}
+  else if(act==='force'){const p=turn.proposals.find(x=>x.key===key);if(p&&p.status==='clash'){p.status='pending';applyProposals(turn,[key])}}
+  else if(act==='reject'){const p=turn.proposals.find(x=>x.key===key);if(p&&(p.status==='pending'||p.status==='clash')){p.status='rejected';renderAI()}}
+  else if(act==='reject-all'){turn.proposals.forEach(p=>{if(p.status==='pending'||p.status==='clash')p.status='rejected'});renderAI()}
 });
 
 /* ---------- wiring ---------- */
