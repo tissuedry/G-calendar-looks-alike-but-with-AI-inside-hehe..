@@ -1182,14 +1182,18 @@ async function askAI(text,opts={}){
   // earlier proposals are summarised with their outcome, so the model knows what was applied or rejected
   const ST_WORD={pending:'menunggu',applied:'diterapkan',rejected:'ditolak',invalid:'tidak valid',working:'diproses',clash:'DITAHAN karena bentrok, menunggu keputusan pengguna'};
   const propSum=t=>t.proposals.map(p=>`- ${p.op}${p.catOp?' kategori':''} "${p.title||''}"${p.next&&!p.catOp?' '+whenOf(p.next)+(p.next.repeat?' ('+ruleText(p.next.repeat,p.next.date)+')':''):''}: ${ST_WORD[p.status]||p.status}${p.status==='clash'?' ('+p.warn.map(msgOf).join(' ')+')':''}`).join('\n');
+  // the outcome of earlier proposals goes into the system prompt, NOT into the assistant's own messages: models copy
+  // whatever their past replies look like, and would start writing fake "(Usulan: … diterapkan)" text
   const hist=aiTurns.filter(t=>t!==reply&&!t.error)
-    .map(t=>({role:t.role,content:[t.content,t.proposals?.length?`(${T('Usulan')}:\n${propSum(t)})`:''].filter(Boolean).join('\n\n')}))
+    .map(t=>({role:t.role,content:t.content||(t.proposals?.length?T('(Mengusulkan {n} perubahan jadwal.)',{n:t.proposals.length}):'')}))
     .filter(t=>t.content).slice(-12);
+  const propTurns=aiTurns.filter(t=>t!==reply&&t.proposals?.length).slice(-3);
+  const propNote=propTurns.length?`\n\n${I18N.lang==='en'?'Proposals made earlier in this chat and their outcome (tracked by the app; never write this list or any proposal status in your reply, only the tool creates proposals):':'Usulan sebelumnya di percakapan ini dan hasilnya (dicatat aplikasi; jangan pernah menulis daftar ini atau status usulan di jawabanmu, hanya alat yang membuat usulan):'}\n${propTurns.map(propSum).join('\n')}`:'';
   aiCtl=new AbortController();
   const bubble=()=>$('aiLog').lastElementChild;
   bubble()?.scrollIntoView({block:'end'});
   try{
-    const context=aiContext(useTools); // also rebuilds the #ref -> event id map used by buildProposals
+    const context=aiContext(useTools)+propNote; // aiContext also rebuilds the #ref -> event id map used by buildProposals
     const r=await fetch('/api/ai',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:context,messages:hist,provider:aiProv||undefined,lang:I18N.lang,tools:useTools}),signal:aiCtl.signal});
     if(!r.ok){let d={};try{d=await r.json()}catch(e){}if(r.status===401)showLogin();const er=new Error(d.error?TS(d.error):T('Terjadi gangguan ({n}).',{n:r.status}));er.code=d.code;throw er}
     reply.via=r.headers.get('X-AI-Provider')||'';reply.model=r.headers.get('X-AI-Model')||'';
