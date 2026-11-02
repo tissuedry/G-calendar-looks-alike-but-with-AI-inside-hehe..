@@ -216,3 +216,6 @@ Endpoint data (`state`, `events`, `cats`, `ai`) meminta login jika `APP_PASSWORD
 | `C` | Buat kegiatan |
 | `/` | Cari |
 | `Esc` | Tutup dialog |
+
+
+lov u claude, sarangeho
