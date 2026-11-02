@@ -178,6 +178,8 @@ const EN = {
   "Pilih minimal satu hari.": "Pick at least one day.",
   "Pengulangan maksimal 2 tahun dari tanggal mulai.": "Repeats can run at most 2 years from the start date.",
   "Hanya tanggal ini": "This date only",
+  "Tanggal itu bukan bagian dari seri ini.": "That date is not part of this series.",
+  "hanya tanggal ini dari seri berulang": "this date only, not the whole series",
   "Seluruh seri": "Whole series",
   "Berulang": "Repeats",
   "seluruh seri berulang": "the whole recurring series",

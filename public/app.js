@@ -825,13 +825,13 @@ function aiContext(withTools=true){
     ?(withTools?`- You CAN propose schedule changes (add/change/delete) through the tool usulkan_perubahan_jadwal. The user will approve or reject each proposal, so never say the schedule has already changed; call it a "proposal".
 - Use the tool ONLY when the user clearly asks to add, change, move or delete an event. For analysis or ordinary questions, answer in text only.
 - If the user pastes notes or a task list and asks for a schedule: create an "add" proposal for every item that has a date. Never invent times: if only a day is given ("tomorrow"), leave "mulai" and "selesai" empty (all-day); if only one time is given ("at 10"), fill ONLY "mulai" and leave "selesai" empty; fill "selesai" only when the user states an end time, a duration or a range; for a deadline ("due by 5pm") fill only "selesai". For routines ("every Monday", "daily") make ONE proposal using "ulangi" (+ "hari", "sampai"), never many separate ones; leave "sampai" empty when the user gives no end date. Do not create proposals for items without a date; ask for the date instead. Do not add events that already exist in the data on the same date (check first and say so if it exists), and do not repeat the notes back in your answer. Always propose through the tool; never write JSON inside the text.
-- For change/delete, put the event number from the data in "ref" (e.g. "#12"). For a change, fill in only the fields that change. Do not guess: if it is unclear which event is meant or there are several candidates, ask first.
+- For change/delete, put the event number from the data in "ref" (e.g. "#12"). For a REPEATING series: to delete the whole series leave "tanggal" empty; to delete just one date (e.g. a holiday) put that date in "tanggal". For a change, fill in only the fields that change. Do not guess: if it is unclear which event is meant or there are several candidates, ask first.
 - Convert relative dates (tomorrow, next Thursday) to YYYY-MM-DD based on the current time. Use 24-hour HH:MM times. The category must be one of the listed categories.
 - Before calling the tool, first write 1–2 short sentences: what you are proposing, and which items you skipped and why (e.g. no date). Keep each proposal's "alasan" brief; do not repeat the title or date.`:`- You cannot change the schedule in this answer. If the user wants to add, change, move or delete an event, tell them to say so directly (for example: "add a team meeting tomorrow at 10") so you can propose it.`)
     :(withTools?`- Kamu BISA mengusulkan perubahan jadwal (tambah/ubah/hapus) lewat alat usulkan_perubahan_jadwal. Pengguna akan menyetujui atau menolak tiap usulan, jadi jangan bilang jadwal sudah berubah; sebut sebagai "usulan".
 - Pakai alat HANYA jika pengguna jelas meminta menambah, mengubah, memindahkan, atau menghapus kegiatan. Untuk analisis atau pertanyaan biasa, jawab dengan teks saja.
 - Jika pengguna menempelkan catatan atau daftar tugas dan meminta dibuatkan jadwal: buat usulan "tambah" untuk setiap butir yang ada tanggalnya. Jangan mengarang jam: jika hanya hari yang disebut ("besok"), kosongkan "mulai" dan "selesai" (seharian); jika hanya satu jam disebut ("jam 10"), isi HANYA "mulai" dan kosongkan "selesai"; isi "selesai" hanya bila pengguna menyebut jam selesai, durasi, atau rentang; untuk tenggat ("deadline jam 17") isi "selesai" saja. Untuk kegiatan rutin ("tiap Senin", "setiap hari") buat SATU usulan dengan "ulangi" (+ "hari", "sampai"), jangan banyak usulan terpisah; kosongkan "sampai" bila pengguna tidak menyebut tanggal akhir. Butir tanpa tanggal jangan dibuatkan usulan; tanyakan tanggalnya. Jangan menambah kegiatan yang sudah ada di data pada tanggal yang sama (cek dulu, beri tahu jika sudah ada), dan jangan mengulang isi catatan di jawabanmu. Selalu usulkan lewat alat; jangan pernah menulis JSON di dalam teks.
-- Untuk ubah/hapus, isi "ref" dengan nomor kegiatan dari data (mis. "#12"). Untuk ubah, isi hanya kolom yang berubah. Jangan menebak: jika kegiatan yang dimaksud tidak jelas atau ada beberapa kemungkinan, tanyakan dulu.
+- Untuk ubah/hapus, isi "ref" dengan nomor kegiatan dari data (mis. "#12"). Untuk seri BERULANG: menghapus seluruh seri = kosongkan "tanggal"; menghapus satu tanggal saja (mis. libur) = isi "tanggal" dengan tanggal itu. Untuk ubah, isi hanya kolom yang berubah. Jangan menebak: jika kegiatan yang dimaksud tidak jelas atau ada beberapa kemungkinan, tanyakan dulu.
 - Tanggal relatif (besok, lusa, Kamis depan) ubah menjadi YYYY-MM-DD berdasarkan waktu sekarang. Jam format 24 jam HH:MM. Kategori harus salah satu dari daftar kategori.
 - Sebelum memanggil alat, tulis 1–2 kalimat singkat lebih dulu: apa yang kamu usulkan, dan butir mana yang dilewati beserta alasannya (mis. tanpa tanggal). Isi "alasan" tiap usulan cukup singkat, jangan mengulang judul atau tanggal.`:`- Kamu tidak bisa mengubah jadwal pada jawaban ini. Jika pengguna ingin menambah, mengubah, memindahkan, atau menghapus kegiatan, minta mereka menuliskannya langsung (mis. "tambahkan rapat tim besok jam 10") supaya kamu bisa mengusulkannya.`);
   if(en)return `You are a personal schedule assistant in the app "My Agenda". Reply in English, in a friendly but clear, concise and practical way.
@@ -938,7 +938,13 @@ function buildProposals(raw){
     const ev=id&&rawEv(id);
     if(!ev)return fail('Kegiatan yang dimaksud tidak ditemukan di jadwal.');
     p.id=ev.id;p.before=ev;p.title=ev.title;
-    if(a.op==='hapus')return;
+    if(a.op==='hapus'){
+      if(ev.repeat&&a.tanggal){ // only that date, not the whole series
+        if(!expandSeries(ev).some(o=>o.date===a.tanggal))return fail('Tanggal itu bukan bagian dari seri ini.');
+        p.skipDate=a.tanggal;
+      }
+      return;
+    }
     const patch={};
     if(a.judul&&a.judul!==ev.title)patch.title=a.judul;
     if(a.tanggal&&a.tanggal!==ev.date)patch.date=a.tanggal;
@@ -1001,6 +1007,7 @@ function proposalHtml(p,ti){
   let body='';
   if(p.status==='invalid')body=`<div class="adet bad">${esc(msgOf(p.error))}</div>`;
   else if(p.op==='tambah')body=`<div class="adet">${esc(whenOf(p.next))}${p.next.cat?' · '+esc(catLabel(p.next.cat)):''}</div>${p.next.repeat?`<div class="adet"><span class="alab">${T('Berulang')}</span>${esc(ruleText(p.next.repeat,p.next.date))}</div>`:''}`;
+  else if(p.op==='hapus'&&p.skipDate)body=`<div class="adet">${esc(whenOf({...p.before,date:p.skipDate}))} · ${T('hanya tanggal ini dari seri berulang')}</div>`;
   else if(p.op==='hapus')body=`<div class="adet">${esc(whenOf(p.before))}${p.before.groupId?' · '+T('hanya kegiatan ini, bukan seluruh seri berulang'):p.before.repeat?' · '+T('seluruh seri berulang'):''}</div>`;
   else{
     const c=p.patch,rows=[],none=T('(kosong)');
@@ -1032,10 +1039,12 @@ async function applyProposals(turn,keys){
   const ups=[],dels=[],upP=[],delP=[];
   for(const p of todo){
     if(p.op==='tambah'){ups.push(p.next);upP.push(p);continue}
-    const cur=events().find(e=>e.id===p.id); // re-read: the event may have changed since the proposal
+    const cur=rawEv(p.id); // re-read: the event may have changed since the proposal (a series exists only as its rule in real[])
     if(!cur){p.status='invalid';p.error={k:'Kegiatan ini sudah tidak ada di jadwal.'};continue}
     p.snapshot=cur;
-    if(p.op==='ubah'){ups.push({...cur,...p.patch});upP.push(p)}else{dels.push(cur.id);delP.push(p)}
+    if(p.op==='ubah'){ups.push({...cur,...p.patch});upP.push(p)}
+    else if(p.skipDate){ups.push({...cur,repeat:{...cur.repeat,skip:[...(cur.repeat.skip||[]),p.skipDate]}});upP.push(p)} // delete one date of a series
+    else{dels.push(cur.id);delP.push(p)}
   }
   let fail=null;
   if(ups.length){try{await saveMany(ups);upP.forEach(p=>p.status='applied')}catch(e){fail=e}}
