@@ -24,9 +24,10 @@ const midnight=d=>{const x=new Date(d);x.setHours(0,0,0,0);return x};
 const mins=t=>{const [h,m]=(t||'0:0').split(':').map(Number);return h*60+m};
 // start and end are both optional: no times = all day, only end = a deadline at that time
 const dur=e=>e.start&&e.end?Math.max(0,mins(e.end)-mins(e.start)):0;
-const eM=e=>e.end?mins(e.end):1440;           // minute the event is over (all day: end of day)
+const eM=e=>e.end?mins(e.end):e.start?mins(e.start):1440; // minute the event is over (all day: end of day)
 const upM=e=>e.start?mins(e.start):eM(e);     // minute it "begins" for upcoming / next checks
-const timeText=e=>e.start?`${e.start}–${e.end}`:e.end?`${T('Tenggat')} ${e.end}`:T('Seharian');
+const timeText=e=>e.start&&e.end?`${e.start}–${e.end}`:e.start?e.start:e.end?`${T('Tenggat')} ${e.end}`:T('Seharian');
+const aiTime=e=>e.start&&e.end?e.start+'-'+e.end:e.start?'pukul '+e.start:e.end?'tenggat '+e.end:'seharian';
 const fmtH=m=>(Math.round(m/6)/10).toString().replace('.',I18N.lang==='id'?',':'.');
 const uid=()=>(crypto.randomUUID?crypto.randomUUID():'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,10));
 let fDay,fDayShort,fDM,fMonth,fMonShort,fWd,fWdLong,fMonthLong;
@@ -255,7 +256,7 @@ function renderCatVis(){
 
 /* ---------- time grid ---------- */
 function layoutDay(list){
-  const items=list.map(e=>{const s=e.start?mins(e.start):Math.max(0,mins(e.end)-30);return {e,s,en:Math.max(mins(e.end),s+20)}}).sort((a,b)=>a.s-b.s||b.en-a.en);
+  const items=list.map(e=>{const s=e.start?mins(e.start):Math.max(0,mins(e.end)-30),en=e.end?mins(e.end):s+30;return {e,s,en:Math.max(en,s+20)}}).sort((a,b)=>a.s-b.s||b.en-a.en);
   const out=[];let cluster=[],cEnd=-1;
   const flush=()=>{const cols=[];cluster.forEach(it=>{let c=cols.findIndex(end=>end<=it.s);if(c<0){c=cols.length;cols.push(0)}cols[c]=it.en;it.col=c});cluster.forEach(it=>{it.cols=cols.length;out.push(it)});cluster=[]};
   items.forEach(it=>{if(cluster.length&&it.s>=cEnd){flush();cEnd=-1}cluster.push(it);cEnd=Math.max(cEnd,it.en)});
@@ -280,7 +281,7 @@ function renderGrid(){
     const blocks=layoutDay((byDay[s]||[]).filter(e=>e.start||e.end)).map(({e,s:st,en,col,cols})=>{
       const h=Math.max(18,(en-st)/60*H-2),cls=h<36?'short':h>90?'tall':'';
       return `<button class="tev ${e.status} ${cls} ${e.start?'':'deadline'} ${lightCls(e.cat)}" data-open="${esc(e.id)}" style="${catStyle(e.cat)};top:${st/60*H}px;height:${h}px;left:calc(${col/cols*100}% + 1px);width:calc(${100/cols}% - 4px)" title="${esc(e.title)} · ${timeText(e)}">
-        <span class="tt">${statusIcon(e)}${esc(e.title)}</span><span class="tm">${cls==='short'?(e.start||e.end):e.start?e.start+' – '+e.end:timeText(e)}</span></button>`;
+        <span class="tt">${statusIcon(e)}${esc(e.title)}</span><span class="tm">${cls==='short'?(e.start||e.end):timeText(e)}</span></button>`;
     }).join('');
     return `<div class="tg-col ${s===today?'today':''} ${wk?'weekend':''}" data-slot="${s}" style="--ci:${ci}">${blocks}${s===today?`<div class="nowline" style="top:${nowM/60*H}px"></div>`:''}</div>`;
   }).join('');
@@ -379,8 +380,8 @@ function renderDashboard(){
 
   // friendly one-paragraph summary of the day
   const hr=now.getHours(), greet=hr<4?T('Selamat malam'):hr<11?T('Selamat pagi'):hr<15?T('Selamat siang'):hr<18?T('Selamat sore'):T('Selamat malam');
-  const todayAct=todayEv.filter(active), timed=todayAct.filter(e=>e.start&&e.end), loose=todayAct.filter(e=>!(e.start&&e.end));
-  const curEv=timed.find(e=>mins(e.start)<=nowM&&nowM<mins(e.end)), laterEv=timed.filter(e=>mins(e.start)>nowM);
+  const todayAct=todayEv.filter(active), timed=todayAct.filter(e=>e.start), loose=todayAct.filter(e=>!e.start);
+  const curEv=timed.find(e=>e.end&&mins(e.start)<=nowM&&nowM<mins(e.end)), laterEv=timed.filter(e=>mins(e.start)>nowM);
   const hmsg=[];
   if(curEv)hmsg.push(T('Sekarang berlangsung <b>{t}</b> sampai {e}.',{t:esc(curEv.title),e:curEv.end}));
   if(laterEv.length)hmsg.push(curEv?T('Setelah itu ada {n} kegiatan lagi, berikutnya <b>{t}</b> pukul {s}.',{n:laterEv.length,t:esc(laterEv[0].title),s:laterEv[0].start}):T('Hari ini ada {n} kegiatan, yang pertama <b>{t}</b> pukul {s}.',{n:laterEv.length,t:esc(laterEv[0].title),s:laterEv[0].start}));
@@ -397,7 +398,7 @@ function renderDashboard(){
     let flag='';
     if(isNow)flag=`<span class="flag now">${T('Berlangsung')}</span>`;
     else if(!nextMarked&&e.start&&mins(e.start)>nowM&&active(e)){nextMarked=true;flag=`<span class="flag next">${T('Berikutnya')}</span>`}
-    const tcol=e.start?`${e.start}<span>${e.end}</span>`:e.end?`${T('Tenggat')}<span>${e.end}</span>`:T('Seharian');
+    const tcol=e.start?`${e.start}${e.end?`<span>${e.end}</span>`:''}`:e.end?`${T('Tenggat')}<span>${e.end}</span>`:T('Seharian');
     return `<li class="${isNow?'now':''} ${(en<=nowM||e.status==='selesai')?'done':''}"><div class="t num">${tcol}</div>${evButton(e,flag)}</li>`;
   }).join(''):`<li class="empty" style="display:block"><b>${T('Tidak ada kegiatan hari ini.')}</b><br>${T('Tambahkan dengan tombol Buat, atau minta Asisten AI.')}</li>`;
 
@@ -543,7 +544,7 @@ function openDetail(id){
   detailId=id;
   const grp=e.groupId?events().filter(x=>x.groupId===e.groupId).length:0;
   $('detBody').innerHTML=`
-    <div class="det-row" style="${catStyle(e.cat)}"><span class="det-sw"></span><div><h2 id="detTitle" class="${e.status==='batal'?'strike':''}">${esc(e.title)}</h2><div class="det-when">${fDayShort.format(parse(e.date))} · ${e.start?`${e.start} – ${e.end} <span class="num">(${fmtH(dur(e))} ${T('jam')})</span>`:timeText(e)}</div></div></div>
+    <div class="det-row" style="${catStyle(e.cat)}"><span class="det-sw"></span><div><h2 id="detTitle" class="${e.status==='batal'?'strike':''}">${esc(e.title)}</h2><div class="det-when">${fDayShort.format(parse(e.date))} · ${e.start&&e.end?`${e.start} – ${e.end} <span class="num">(${fmtH(dur(e))} ${T('jam')})</span>`:timeText(e)}</div></div></div>
     <div class="det-row"><span class="ms">sell</span><span>${esc(catLabel(e.cat))}</span></div>
     ${e.seriesId?`<div class="det-row"><span class="ms">event_repeat</span><span>${T('Berulang')}: ${esc(ruleText(e.repeat,rawEv(e.seriesId).date))}</span></div>`:''}
     ${grp>1?`<div class="det-row"><span class="ms">event_repeat</span><span>${T('Bagian dari kegiatan berulang ({n} kegiatan)',{n:grp})}</span></div>`:''}
@@ -668,8 +669,7 @@ $('evForm').addEventListener('submit',async ev=>{
   const err=m=>{$('f-err').textContent=m;$('f-err').hidden=false};
   if(!title)return err(T('Isi judul kegiatan.'));
   if(!date)return err(T('Pilih tanggal.'));
-  if(start&&!end)return err(T('Isi jam selesai, atau kosongkan jam mulai untuk tugas dengan tenggat saja.'));
-  if(start&&mins(end)<=mins(start))return err(T('Jam selesai harus setelah jam mulai.'));
+  if(start&&end&&mins(end)<=mins(start))return err(T('Jam selesai harus setelah jam mulai.'));
   const catIn=document.querySelector('input[name=cat]:checked');
   const base={title,date,start,end,cat:catIn?catIn.value:'',status:$('f-status').value,notes:$('f-notes').value.trim()};
   let list;
@@ -806,13 +806,13 @@ function aiContext(withTools=true){
   const picked=inRange(ev.filter(e=>!e.seriesId),from,to).sort((a,b)=>dist(a)-dist(b)).slice(0,maxLines).sort(sortEv);
   aiRefs=new Map();
   const noteLabel=en?'notes: ':'catatan: ';
-  const lines=picked.map((e,i)=>{aiRefs.set(String(i+1),e.id);return `#${i+1} ${e.date} ${fWd.format(parse(e.date))} ${e.start?e.start+'-'+e.end:e.end?'tenggat '+e.end:'seharian'} |${catLabel(e.cat)} | ${e.title} | ${STATUS[e.status]}${e.notes?' | '+noteLabel+e.notes.replace(/\s+/g,' ').slice(0,100):''}`});
+  const lines=picked.map((e,i)=>{aiRefs.set(String(i+1),e.id);return `#${i+1} ${e.date} ${fWd.format(parse(e.date))} ${aiTime(e)} |${catLabel(e.cat)} | ${e.title} | ${STATUS[e.status]}${e.notes?' | '+noteLabel+e.notes.replace(/\s+/g,' ').slice(0,100):''}`});
   // a recurring series is sent as ONE line (its rule) plus the occurrences of the next 14 days that the app already computed
   const t14=ymd(addDays(t0,13)),tToday=ymd(t0);
   real.filter(s=>s.repeat&&(!s.repeat.until||s.repeat.until>=from)&&s.date<=to).forEach(s=>{
     const n=lines.length+1;aiRefs.set(String(n),s.id);
     const soon=expandSeries(s).filter(o=>o.date>=tToday&&o.date<=t14).map(o=>`${fWd.format(parse(o.date))} ${o.date.slice(5)}${o.status!=='rencana'?' ('+STATUS[o.status]+')':''}`).join(', ');
-    lines.push(`#${n} ${en?'REPEATING':'BERULANG'} ${ruleText(s.repeat,s.date)}, ${en?'starting':'mulai'} ${s.date} ${s.start?s.start+'-'+s.end:s.end?'tenggat '+s.end:'seharian'} |${catLabel(s.cat)} | ${s.title}${s.notes?' | '+noteLabel+s.notes.replace(/\s+/g,' ').slice(0,100):''} | ${en?'next 14 days':'14 hari ke depan'}: ${soon||(en?'none':'tidak ada')}`);
+    lines.push(`#${n} ${en?'REPEATING':'BERULANG'} ${ruleText(s.repeat,s.date)}, ${en?'starting':'mulai'} ${s.date} ${aiTime(s)} |${catLabel(s.cat)} | ${s.title}${s.notes?' | '+noteLabel+s.notes.replace(/\s+/g,' ').slice(0,100):''} | ${en?'next 14 days':'14 hari ke depan'}: ${soon||(en?'none':'tidak ada')}`);
   });
   const ws=weekStart(now);
   const clock=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
@@ -824,13 +824,13 @@ function aiContext(withTools=true){
   const rules=en
     ?(withTools?`- You CAN propose schedule changes (add/change/delete) through the tool usulkan_perubahan_jadwal. The user will approve or reject each proposal, so never say the schedule has already changed; call it a "proposal".
 - Use the tool ONLY when the user clearly asks to add, change, move or delete an event. For analysis or ordinary questions, answer in text only.
-- If the user pastes notes or a task list and asks for a schedule: create an "add" proposal for every item that has a date. If no time is given, pick a sensible one (e.g. 09:00–10:00) and state that assumption in "alasan". Do not create proposals for items without a date; ask for the date instead. Do not add events that already exist in the data on the same date (check first and say so if it exists), and do not repeat the notes back in your answer. Always propose through the tool; never write JSON inside the text.
+- If the user pastes notes or a task list and asks for a schedule: create an "add" proposal for every item that has a date. Never invent times: if only a day is given ("tomorrow"), leave "mulai" and "selesai" empty (all-day); if only one time is given ("at 10"), fill ONLY "mulai" and leave "selesai" empty; fill "selesai" only when the user states an end time, a duration or a range; for a deadline ("due by 5pm") fill only "selesai". For routines ("every Monday", "daily") make ONE proposal using "ulangi" (+ "hari", "sampai"), never many separate ones; leave "sampai" empty when the user gives no end date. Do not create proposals for items without a date; ask for the date instead. Do not add events that already exist in the data on the same date (check first and say so if it exists), and do not repeat the notes back in your answer. Always propose through the tool; never write JSON inside the text.
 - For change/delete, put the event number from the data in "ref" (e.g. "#12"). For a change, fill in only the fields that change. Do not guess: if it is unclear which event is meant or there are several candidates, ask first.
 - Convert relative dates (tomorrow, next Thursday) to YYYY-MM-DD based on the current time. Use 24-hour HH:MM times. The category must be one of the listed categories.
 - Before calling the tool, first write 1–2 short sentences: what you are proposing, and which items you skipped and why (e.g. no date). Keep each proposal's "alasan" brief; do not repeat the title or date.`:`- You cannot change the schedule in this answer. If the user wants to add, change, move or delete an event, tell them to say so directly (for example: "add a team meeting tomorrow at 10") so you can propose it.`)
     :(withTools?`- Kamu BISA mengusulkan perubahan jadwal (tambah/ubah/hapus) lewat alat usulkan_perubahan_jadwal. Pengguna akan menyetujui atau menolak tiap usulan, jadi jangan bilang jadwal sudah berubah; sebut sebagai "usulan".
 - Pakai alat HANYA jika pengguna jelas meminta menambah, mengubah, memindahkan, atau menghapus kegiatan. Untuk analisis atau pertanyaan biasa, jawab dengan teks saja.
-- Jika pengguna menempelkan catatan atau daftar tugas dan meminta dibuatkan jadwal: buat usulan "tambah" untuk setiap butir yang ada tanggalnya. Jika jamnya tidak disebut, pilih jam yang masuk akal (mis. 09:00–10:00) dan sebutkan asumsi itu di "alasan". Butir tanpa tanggal jangan dibuatkan usulan; tanyakan tanggalnya. Jangan menambah kegiatan yang sudah ada di data pada tanggal yang sama (cek dulu, beri tahu jika sudah ada), dan jangan mengulang isi catatan di jawabanmu. Selalu usulkan lewat alat; jangan pernah menulis JSON di dalam teks.
+- Jika pengguna menempelkan catatan atau daftar tugas dan meminta dibuatkan jadwal: buat usulan "tambah" untuk setiap butir yang ada tanggalnya. Jangan mengarang jam: jika hanya hari yang disebut ("besok"), kosongkan "mulai" dan "selesai" (seharian); jika hanya satu jam disebut ("jam 10"), isi HANYA "mulai" dan kosongkan "selesai"; isi "selesai" hanya bila pengguna menyebut jam selesai, durasi, atau rentang; untuk tenggat ("deadline jam 17") isi "selesai" saja. Untuk kegiatan rutin ("tiap Senin", "setiap hari") buat SATU usulan dengan "ulangi" (+ "hari", "sampai"), jangan banyak usulan terpisah; kosongkan "sampai" bila pengguna tidak menyebut tanggal akhir. Butir tanpa tanggal jangan dibuatkan usulan; tanyakan tanggalnya. Jangan menambah kegiatan yang sudah ada di data pada tanggal yang sama (cek dulu, beri tahu jika sudah ada), dan jangan mengulang isi catatan di jawabanmu. Selalu usulkan lewat alat; jangan pernah menulis JSON di dalam teks.
 - Untuk ubah/hapus, isi "ref" dengan nomor kegiatan dari data (mis. "#12"). Untuk ubah, isi hanya kolom yang berubah. Jangan menebak: jika kegiatan yang dimaksud tidak jelas atau ada beberapa kemungkinan, tanyakan dulu.
 - Tanggal relatif (besok, lusa, Kamis depan) ubah menjadi YYYY-MM-DD berdasarkan waktu sekarang. Jam format 24 jam HH:MM. Kategori harus salah satu dari daftar kategori.
 - Sebelum memanggil alat, tulis 1–2 kalimat singkat lebih dulu: apa yang kamu usulkan, dan butir mana yang dilewati beserta alasannya (mis. tanpa tanggal). Isi "alasan" tiap usulan cukup singkat, jangan mengulang judul atau tanggal.`:`- Kamu tidak bisa mengubah jadwal pada jawaban ini. Jika pengguna ingin menambah, mengubah, memindahkan, atau menghapus kegiatan, minta mereka menuliskannya langsung (mis. "tambahkan rapat tim besok jam 10") supaya kamu bisa mengusulkannya.`);
@@ -899,6 +899,20 @@ const whenOf=e=>`${fWd.format(parse(e.date))}, ${fDM.format(parse(e.date))} · $
 const clockAfter=(start,minutes)=>{const m=mins(start)+minutes;return m<1440?pad(Math.floor(m/60))+':'+pad(m%60):null};
 // messages on a proposal are stored as {k,v} (text key + values) so they follow a language switch
 const msgOf=m=>T(m.k,m.v);
+const DOW_WORDS=[['min',0],['ahad',0],['sun',0],['sen',1],['mon',1],['sel',2],['tue',2],['rab',3],['wed',3],['kam',4],['thu',4],['jum',5],['fri',5],['sab',6],['sat',6]];
+const dowOf=v=>{const x=String(v).toLowerCase().trim();if(/^[0-6]$/.test(x))return +x;return DOW_WORDS.find(([w])=>x.startsWith(w))?.[1]};
+// the AI's "ulangi/hari/sampai" fields -> the stored rule (null if unusable)
+function ruleFromAction(a){
+  const d=parse(a.tanggal),freq=a.ulangi==='bulanan'?'monthly':'weekly';
+  let days=[];
+  if(freq==='weekly'){
+    days=a.ulangi==='harian'?[0,1,2,3,4,5,6]:a.ulangi==='hari_kerja'?[1,2,3,4,5]:a.ulangi==='mingguan'&&!(a.hari||[]).length?[d.getDay()]:[...new Set((a.hari||[]).map(dowOf).filter(x=>x!==undefined))];
+    if(!days.length)return null;
+  }
+  const until=a.sampai||'';
+  if(until&&(until<a.tanggal||(parse(until)-d)/864e5>730))return null;
+  return {freq,days,until,skip:[],st:{}};
+}
 function buildProposals(raw){
   const out=[];
   raw.slice(0,20).forEach((a,i)=>{
@@ -910,9 +924,13 @@ function buildProposals(raw){
     if(a.kategori&&catId===undefined)p.warn.push({k:'Kategori "{c}" tidak ditemukan.',v:{c:a.kategori}});
     if(a.op==='tambah'){
       if(!a.judul||!a.tanggal)return fail('Usulan kurang lengkap (judul, tanggal, atau jam).');
-      if(a.mulai&&!a.selesai)return fail('Usulan kurang lengkap (judul, tanggal, atau jam).');
-      if(a.mulai&&a.selesai<=a.mulai)return fail('Jam selesai harus setelah jam mulai.');
+      if(a.mulai&&a.selesai&&a.selesai<=a.mulai)return fail('Jam selesai harus setelah jam mulai.');
       p.next={id:uid(),title:a.judul,date:a.tanggal,start:a.mulai||'',end:a.selesai||'',cat:catId??'',status:a.status||'rencana',notes:a.catatan||'',createdAt:Date.now()};
+      if(a.ulangi){ // a recurring series, stored once
+        const rule=ruleFromAction(a);
+        if(!rule)return fail('Aturan pengulangan tidak valid (pilih hari, atau tanggal akhir sebelum tanggal mulai).');
+        p.next.repeat=rule;p.next.status='rencana';
+      }
       p.title=a.judul;
       return;
     }
@@ -926,21 +944,21 @@ function buildProposals(raw){
     if(a.tanggal&&a.tanggal!==ev.date)patch.date=a.tanggal;
     if(a.mulai&&a.mulai!==ev.start)patch.start=a.mulai;
     if(a.selesai&&a.selesai!==ev.end)patch.end=a.selesai;
-    if(patch.start&&!patch.end&&!a.selesai&&ev.start){const e2=clockAfter(patch.start,dur(ev));if(e2)patch.end=e2} // moved start only: keep the duration
+    if(patch.start&&!patch.end&&!a.selesai&&ev.start&&ev.end){const e2=clockAfter(patch.start,dur(ev));if(e2)patch.end=e2} // moved start only: keep the duration
     if(catId!==undefined&&catId!==ev.cat)patch.cat=catId;
     if(a.status&&a.status!==ev.status)patch.status=a.status;
     if(a.catatan!==undefined&&a.catatan!==(ev.notes||''))patch.notes=a.catatan;
+    if(ev.repeat&&a.sampai&&a.sampai!==ev.repeat.until){if(a.sampai<ev.date)return fail('Aturan pengulangan tidak valid (pilih hari, atau tanggal akhir sebelum tanggal mulai).');patch.repeat={...ev.repeat,until:a.sampai}}
     if(!Object.keys(patch).length)return fail('Tidak ada yang berubah dari kegiatan ini.');
     const next={...ev,...patch};
-    if(next.start&&!next.end)return fail('Usulan kurang lengkap (judul, tanggal, atau jam).');
-    if(next.start&&next.end<=next.start)return fail('Jam selesai harus setelah jam mulai.');
+    if(next.start&&next.end&&next.end<=next.start)return fail('Jam selesai harus setelah jam mulai.');
     p.patch=patch;p.next=next;
   });
   // overlap warnings, ignoring events that are being deleted in the same batch
   const gone=new Set(out.filter(p=>p.op==='hapus'&&p.id).map(p=>p.id));
   out.forEach(p=>{
-    if(!p.next||p.status==='invalid'||p.next.status==='batal'||!p.next.start)return;
-    events().filter(e=>e.id!==p.next.id&&!gone.has(e.id)&&e.date===p.next.date&&active(e)&&e.start&&mins(e.start)<mins(p.next.end)&&mins(p.next.start)<mins(e.end))
+    if(!p.next||p.status==='invalid'||p.next.status==='batal'||p.next.repeat||!(p.next.start&&p.next.end))return;
+    events().filter(e=>e.id!==p.next.id&&!gone.has(e.id)&&e.date===p.next.date&&active(e)&&e.start&&e.end&&mins(e.start)<mins(p.next.end)&&mins(p.next.start)<mins(e.end))
       .slice(0,2).forEach(e=>p.warn.push({k:'Bentrok dengan "{t}" ({s}–{e}).',v:{t:e.title,s:e.start,e:e.end}}));
   });
   return out;
@@ -963,6 +981,9 @@ function rescueActions(text){
     put('judul',str(a.judul,120));
     put('tanggal',/^\d{4}-\d{2}-\d{2}$/.test(a.tanggal)?a.tanggal:undefined);
     put('mulai',clock(a.mulai));put('selesai',clock(a.selesai));
+    put('ulangi',['harian','hari_kerja','mingguan','bulanan','kustom'].includes(a.ulangi)?a.ulangi:undefined);
+    if(Array.isArray(a.hari))x.hari=a.hari.map(v=>str(String(v),12)).filter(Boolean).slice(0,7);
+    put('sampai',/^\d{4}-\d{2}-\d{2}$/.test(a.sampai)?a.sampai:undefined);
     put('kategori',str(a.kategori,40));
     put('status',['rencana','selesai','tunda','batal'].includes(a.status)?a.status:undefined);
     if(typeof a.catatan==='string')x.catatan=a.catatan.trim().slice(0,2000);
@@ -979,11 +1000,12 @@ function proposalHtml(p,ti){
   const a=(act,label,cls)=>`<button type="button" class="btn small ${cls}" data-aact="${act}" data-aturn="${ti}" data-akey="${p.key}"${p.status==='working'?' disabled':''}>${label}</button>`;
   let body='';
   if(p.status==='invalid')body=`<div class="adet bad">${esc(msgOf(p.error))}</div>`;
-  else if(p.op==='tambah')body=`<div class="adet">${esc(whenOf(p.next))}${p.next.cat?' · '+esc(catLabel(p.next.cat)):''}</div>`;
+  else if(p.op==='tambah')body=`<div class="adet">${esc(whenOf(p.next))}${p.next.cat?' · '+esc(catLabel(p.next.cat)):''}</div>${p.next.repeat?`<div class="adet"><span class="alab">${T('Berulang')}</span>${esc(ruleText(p.next.repeat,p.next.date))}</div>`:''}`;
   else if(p.op==='hapus')body=`<div class="adet">${esc(whenOf(p.before))}${p.before.groupId?' · '+T('hanya kegiatan ini, bukan seluruh seri berulang'):p.before.repeat?' · '+T('seluruh seri berulang'):''}</div>`;
   else{
     const c=p.patch,rows=[],none=T('(kosong)');
     if(c.date||c.start||c.end)rows.push([T('Waktu'),whenOf(p.before),whenOf(p.next)]);
+    if(c.repeat)rows.push([T('Berulang'),ruleText(p.before.repeat,p.before.date),ruleText(p.next.repeat,p.next.date)]);
     if(c.title)rows.push([T('Judul'),p.before.title,p.next.title]);
     if(c.cat!==undefined)rows.push([T('Kategori'),catLabel(p.before.cat),catLabel(p.next.cat)]);
     if(c.status)rows.push([T('Status'),STATUS[p.before.status],STATUS[p.next.status]]);
