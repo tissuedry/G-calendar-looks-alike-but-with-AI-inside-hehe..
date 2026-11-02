@@ -146,8 +146,12 @@ async function saveCats(next){
   render();
 }
 async function setStatus(id,status){
-  const e=events().find(x=>x.id===id);if(!e)return;
-  try{await saveMany([{...e,status}]);toast(T('Ditandai: {s}',{s:STATUS[status]}))}catch(err){toast(T('Gagal menyimpan. {m}',{m:err.message}))}
+  const e=events().find(x=>x.id===id);if(!e||e.status===status)return;
+  // optimistic: show the new status at once, then save; roll back if the save fails
+  const i=real.findIndex(x=>x.id===id),prev=real[i];
+  if(i>=0){real[i]={...e,status};render()}
+  try{await saveMany([{...e,status}]);toast(T('Ditandai: {s}',{s:STATUS[status]}))}
+  catch(err){if(i>=0){real[i]=prev;render()}toast(T('Gagal menyimpan. {m}',{m:err.message}))}
 }
 
 /* ---------- shared bits ---------- */
