@@ -167,6 +167,7 @@ const EN = {
   "Jam boleh dikosongkan. Isi hanya jam mulai untuk kegiatan di jam itu saja, hanya jam selesai untuk tenggat, atau kosongkan keduanya untuk kegiatan seharian.": "Times are optional. Fill in only the start time for something at that time, only the end time for a deadline, or leave both empty for an all-day item.",
   "Aturan pengulangan tidak valid (pilih hari, atau tanggal akhir sebelum tanggal mulai).": "Invalid repeat rule (pick days, or the end date is before the start date).",
   "Kosongkan jam": "Clear times",
+  "Tanpa tanggal akhir (terus berulang)": "No end date (keeps repeating)",
   "Tanpa tanggal akhir": "No end date",
   "Terus berulang": "Keeps repeating",
   "tanpa batas akhir": "no end date",
