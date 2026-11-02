@@ -330,11 +330,11 @@ function closeDay(){$('dayOv').hidden=true;openDayStr=null}
 /* ---------- schedule ---------- */
 function renderList(){
   const fcBox=$('fcat'),checked=v=>new Set([...v.querySelectorAll('input:checked')].map(i=>i.value));
-  const prev=checked(fcBox),opts=[...cats.map(c=>[c.id,catName(c)]),['__none',T('Tanpa kategori')]];
+  const prev=checked(fcBox),opts=[...cats.map(c=>[c.id,catName(c),`--cat:var(--${c.color})`]),['__none',T('Tanpa kategori'),'--cat:var(--faint)']];
   const sig=JSON.stringify(opts);
   if(fcBox.dataset.sig!==sig){
     fcBox.dataset.sig=sig;
-    fcBox.innerHTML=opts.map(([id,n])=>`<label class="fchk"><input type="checkbox" value="${esc(id)}"${prev.has(id)?' checked':''}><span>${esc(n)}</span></label>`).join('');
+    fcBox.innerHTML=opts.map(([id,n,st])=>`<label class="fchk cat" style="${st}"><input type="checkbox" value="${esc(id)}"${prev.has(id)?' checked':''}><span>${esc(n)}</span></label>`).join('');
   }
   const q=$('fq').value.trim().toLowerCase(),per=$('fperiod').value,fc=checked(fcBox),fs=checked($('fstatus'));
   const today=ymd(now),mPre=today.slice(0,7);
