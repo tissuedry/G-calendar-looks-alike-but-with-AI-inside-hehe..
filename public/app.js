@@ -887,7 +887,8 @@ ${body}`;
 }
 function md(s){
   const out=[];let list=null;
-  const inline=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g,'$1<i>$2</i>');
+  // everything is escaped; only a line break the model writes as <br> (common inside table cells) is let through
+  const inline=t=>esc(t).replace(/&lt;br\s*\/?&gt;/gi,'<br>').replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g,'$1<i>$2</i>');
   const flush=()=>{if(list){out.push(`<${list.tag}>${list.items.join('')}</${list.tag}>`);list=null}};
   let tbl=null;
   const cells=l=>l.replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
