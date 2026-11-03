@@ -1014,8 +1014,12 @@ function buildProposals(raw){
     const patch={};
     if(a.judul&&a.judul!==ev.title)patch.title=a.judul;
     if(a.tanggal&&a.tanggal!==ev.date)patch.date=a.tanggal;
-    if(a.mulai&&a.mulai!==ev.start)patch.start=a.mulai;
-    if(a.selesai&&a.selesai!==ev.end)patch.end=a.selesai;
+    if(a.mulai&&!a.selesai&&!ev.start&&ev.end){ // deadline-only event: a single new time moves the deadline, no range
+      if(a.mulai!==ev.end)patch.end=a.mulai;
+    }else{
+      if(a.mulai&&a.mulai!==ev.start)patch.start=a.mulai;
+      if(a.selesai&&a.selesai!==ev.end)patch.end=a.selesai;
+    }
     if(patch.start&&!patch.end&&!a.selesai&&ev.start&&ev.end){const e2=clockAfter(patch.start,dur(ev));if(e2)patch.end=e2} // moved start only: keep the duration
     if(catId!==undefined&&catId!==ev.cat)patch.cat=catId;
     if(p.newCat)patch.cat=''; // filled with the new category's id on approval
