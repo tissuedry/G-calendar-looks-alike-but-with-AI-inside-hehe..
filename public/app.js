@@ -1333,7 +1333,8 @@ function speak(text,done){
   u.onend=end;u.onerror=end;
   synth.speak(u);
 }
-function stopVoice(){synth&&synth.cancel();if(rec){try{rec.abort()}catch(e){}}}
+let mr=null; // the recorder of the Whisper fallback while it is capturing
+function stopVoice(){synth&&synth.cancel();if(rec){try{rec.abort()}catch(e){}}if(mr)mr.cancel()}
 // markdown reply -> a short sentence or two that sounds natural (tables and lists are skipped: they are for reading)
 function plainSpeech(md){
   const lines=String(md||'').split('\n').filter(l=>l.trim()&&!/^\s*\|/.test(l)&&!/^\s*[-*•]\s/.test(l));
@@ -1392,7 +1393,55 @@ function setListening(on){
   b.classList.toggle('rec',on);b.setAttribute('aria-pressed',on);
   $('aiInput').placeholder=on?T('Mendengarkan…'):T('Tanya tentang jadwal Anda…');
 }
-function listen(){
+// Brave and Firefox cannot use the browser's own recognizer (it needs Google's service): record the audio and let the
+// server transcribe it with Whisper instead. Chrome / Edge keep the live, word-by-word recognizer.
+const REC_OK=!!(navigator.mediaDevices?.getUserMedia&&window.MediaRecorder);
+let useRec=REC_OK&&(!SR||!!navigator.brave||store.get('agenda-stt')==='rec');
+const lastBot=()=>[...aiTurns].reverse().find(x=>x.role==='assistant');
+const noAnswer=()=>{if(openProps(lastBot()).length)speak(T('Saya tidak mendengar jawaban. Ketuk mikrofon lalu katakan iya atau tidak.'))};
+const micErr=name=>name==='NotAllowedError'||name==='SecurityError'
+  ?T('Izin mikrofon ditolak. Klik ikon gembok di sebelah alamat situs, lalu izinkan Mikrofon.')
+  :T('Mikrofon tidak ditemukan. Periksa apakah mikrofon terpasang dan tidak dipakai aplikasi lain.');
+async function listenRec(){
+  if(aiBusy)return;
+  stopVoice();
+  let stream;
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}
+  catch(e){toast(micErr(e.name));return}
+  const mime=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus'].find(m=>MediaRecorder.isTypeSupported(m))||'';
+  let m;try{m=new MediaRecorder(stream,mime?{mimeType:mime}:undefined)}catch(e){stream.getTracks().forEach(t=>t.stop());toast(T('Suara tidak didukung browser ini. Gunakan Chrome atau Edge.'));return}
+  const chunks=[],AC=window.AudioContext||window.webkitAudioContext;
+  let ac=null,an=null,buf=null,timer=0,heard=false,quiet=0,send=true;const t0=Date.now();
+  try{ac=new AC();an=ac.createAnalyser();an.fftSize=1024;ac.createMediaStreamSource(stream).connect(an);buf=new Uint8Array(an.fftSize)}catch(e){ac=null}
+  const stop=()=>{if(m.state!=='inactive')m.stop()};
+  // stop by itself ~1.3 s after the person went quiet (or after 8 s of silence / 25 s in total)
+  if(ac)timer=setInterval(()=>{
+    an.getByteTimeDomainData(buf);let s=0;for(const v of buf)s+=(v-128)*(v-128);
+    const lvl=Math.sqrt(s/buf.length)/128, now=Date.now();
+    if(lvl>0.03){heard=true;quiet=0}else if(!quiet)quiet=now;
+    if((heard&&quiet&&now-quiet>1300)||(!heard&&now-t0>8000)||now-t0>25000)stop();
+  },100);
+  else{heard=true;setTimeout(stop,7000)} // no analyser: fixed 7 s window
+  m.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+  m.onstop=async()=>{
+    clearInterval(timer);stream.getTracks().forEach(t=>t.stop());if(ac)ac.close().catch(()=>{});
+    mr=null;setListening(false);
+    if(!send)return;
+    if(!heard||!chunks.length){$('aiInput').placeholder=T('Tanya tentang jadwal Anda…');noAnswer();return}
+    $('aiInput').placeholder=T('Memproses suara…');
+    try{
+      const blob=new Blob(chunks,{type:m.mimeType||mime||'audio/webm'});
+      const b64=await new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result).split(',')[1]||'');fr.onerror=no;fr.readAsDataURL(blob)});
+      const d=await api('stt',{method:'POST',body:{audio:b64,mime:blob.type,lang:I18N.lang}});
+      $('aiInput').placeholder=T('Tanya tentang jadwal Anda…');
+      if(d?.text)routeVoice(d.text);else noAnswer();
+    }catch(e){$('aiInput').placeholder=T('Tanya tentang jadwal Anda…');toast(e.message||T('Terjadi gangguan. Coba kirim lagi.'))}
+  };
+  mr={stop,cancel:()=>{send=false;stop()}};
+  m.start();setListening(true);
+}
+function listen(){if(useRec)listenRec();else listenSR()}
+function listenSR(){
   if(!SR){toast(T('Suara tidak didukung browser ini. Gunakan Chrome atau Edge.'));return}
   if(aiBusy)return;
   stopVoice();
@@ -1405,8 +1454,12 @@ function listen(){
     const t=fin.trim();
     if(t){routeVoice(t);return}
     $('aiInput').value='';
-    if(err==='not-allowed'||err==='service-not-allowed')toast(T('Izin mikrofon ditolak. Izinkan mikrofon di pengaturan browser.'));
-    else if(err!=='aborted'&&openProps([...aiTurns].reverse().find(x=>x.role==='assistant')).length)speak(T('Saya tidak mendengar jawaban. Ketuk mikrofon lalu katakan iya atau tidak.'));
+    if(err==='not-allowed')toast(T('Izin mikrofon ditolak. Klik ikon gembok di sebelah alamat situs, lalu izinkan Mikrofon.'));
+    else if((err==='service-not-allowed'||err==='network')&&REC_OK){useRec=true;store.set('agenda-stt','rec');listenRec()} // the browser's recognizer is blocked or unreachable: switch to the Whisper fallback for good
+    else if(err==='service-not-allowed')toast(T('Browser ini memblokir layanan pengenalan suara. Coba Chrome atau Edge biasa (bukan Brave atau browser di dalam aplikasi).'));
+    else if(err==='audio-capture')toast(T('Mikrofon tidak ditemukan. Periksa apakah mikrofon terpasang dan tidak dipakai aplikasi lain.'));
+    else if(err==='network')toast(T('Layanan pengenalan suara tidak terjangkau. Periksa koneksi internet.'));
+    else if(err!=='aborted')noAnswer();
   };
   try{r.start();setListening(true)}catch(e){setListening(false)}
 }
@@ -1424,8 +1477,8 @@ function renderSpeakBtn(){
   b.setAttribute('aria-pressed',voiceOut);b.title=b.ariaLabel=voiceOut?T('Suara asisten: nyala'):T('Suara asisten: mati');
   b.hidden=!synth;
 }
-if(!SR)$('aiMic').hidden=true;
-$('aiMic').onclick=()=>{if(listening){try{rec.stop()}catch(e){}}else listen()};
+if(!SR&&!REC_OK)$('aiMic').hidden=true;
+$('aiMic').onclick=()=>{if(listening){if(mr)mr.stop();else try{rec.stop()}catch(e){}}else listen()};
 $('aiSpeak').onclick=()=>{voiceOut=!voiceOut;store.set('agenda-voice',voiceOut?'1':'0');if(!voiceOut)synth&&synth.cancel();renderSpeakBtn()};
 renderSpeakBtn();
 addEventListener('pagehide',stopVoice);
