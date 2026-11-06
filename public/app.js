@@ -1227,7 +1227,7 @@ async function askAI(text,opts={}){
     .filter(t=>t.content).slice(-12);
   const propTurns=aiTurns.filter(t=>t!==reply&&t.proposals?.length).slice(-3);
   const propNote=propTurns.length?`\n\n${I18N.lang==='en'?'Proposals made earlier in this chat and their outcome (tracked by the app; never write this list or any proposal status in your reply, only the tool creates proposals):':'Usulan sebelumnya di percakapan ini dan hasilnya (dicatat aplikasi; jangan pernah menulis daftar ini atau status usulan di jawabanmu, hanya alat yang membuat usulan):'}\n${propTurns.map(propSum).join('\n')}`:'';
-  aiCtl=new AbortController();let aborted=false;
+  aiCtl=new AbortController();
   const bubble=()=>$('aiLog').lastElementChild;
   bubble()?.scrollIntoView({block:'end'});
   try{
@@ -1252,17 +1252,15 @@ async function askAI(text,opts={}){
     if(!reply.content.trim()&&!reply.proposals?.length){reply.content=T('Tidak ada jawaban dari AI. Coba kirim lagi.');reply.error=true}
   }catch(e){
     reply.pending=false;
-    if(e.name==='AbortError'){aborted=true;reply.content=(reply.content?reply.content+'\n\n':'')+T('(Dihentikan)')}
+    if(e.name==='AbortError')reply.content=(reply.content?reply.content+'\n\n':'')+T('(Dihentikan)');
     else if(reply.content||reply.proposals?.length)reply.content+='\n\n'+T('(Koneksi terputus.)');
     else{reply.content=AI_ERR_KEYS[e.code]?T(AI_ERR_KEYS[e.code]):(e.message||T('Terjadi gangguan. Coba kirim lagi.'));reply.error=true}
   }finally{
     aiBusy=false;aiCtl=null;$('aiStop').hidden=true;$('aiSend').disabled=false;renderAI();
     $('aiLog').lastElementChild?.scrollIntoView({block:'nearest'});
-    if(voiceTurn){voiceTurn=false;if(!aborted)voiceRespond(reply)}
   }
 }
 function setAI(open){
-  if(!open)stopVoice();
   $('aiPanel').hidden=!open;$('aiBtn').setAttribute('aria-pressed',open);$('tabAI').setAttribute('aria-pressed',open);
   store.set('agenda-ai',open?'1':'0');
   if(open){renderAI();closeDrawer();loadProviders();setTimeout(()=>$('aiInput').focus(),30)}
@@ -1292,12 +1290,11 @@ $('navAI').onclick=()=>setAI(true);
 $('tabAI').onclick=()=>setAI($('aiPanel').hidden);
 $('aiBtn').onclick=()=>setAI($('aiPanel').hidden);
 $('aiClose').onclick=()=>setAI(false);
-$('aiStop').addEventListener('click',()=>{voiceTurn=false;synth&&synth.cancel()});
 $('aiForm').addEventListener('submit',e=>{e.preventDefault();const v=$('aiInput').value;$('aiInput').value='';$('aiInput').style.height='auto';askAI(v)});
 $('aiInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('aiForm').requestSubmit()}});
 $('aiInput').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(140,e.target.scrollHeight)+'px'});
 $('aiStop').onclick=()=>aiCtl?.abort();
-$('aiReset').onclick=()=>{stopVoice();voiceTurn=false;if(aiBusy)aiCtl?.abort();aiTurns=[];renderAI()};
+$('aiReset').onclick=()=>{if(aiBusy)aiCtl?.abort();aiTurns=[];renderAI()};
 $('aiPanel').addEventListener('click',e=>{
   const b=e.target.closest('[data-chip]');if(b){askAI(T(AI_CHIPS[+b.dataset.chip].p),{tools:false});return}
   const ab=e.target.closest('[data-aact]');if(!ab)return;
@@ -1310,178 +1307,6 @@ $('aiPanel').addEventListener('click',e=>{
   else if(act==='reject'){const p=turn.proposals.find(x=>x.key===key);if(p&&(p.status==='pending'||p.status==='clash')){p.status='rejected';renderAI()}}
   else if(act==='reject-all'){turn.proposals.forEach(p=>{if(p.status==='pending'||p.status==='clash')p.status='rejected'});renderAI()}
 });
-
-/* ---------- voice: speak to the assistant, it answers aloud and asks "iya / tidak" before changing the schedule ---------- */
-const SR=window.SpeechRecognition||window.webkitSpeechRecognition, synth=window.speechSynthesis||null;
-let voiceOut=store.get('agenda-voice')!=='0', voiceTurn=false, rec=null, listening=false;
-const vEn=()=>I18N.lang==='en';
-// prefer a female voice: Edge "Gadis (Natural)", Chrome "Google Bahasa Indonesia", Apple "Damayanti"; never the known male ones
-const MALE_V=/ardi|andika|\bguy\b|david|mark|ryan|george|daniel|alex|james|male(?!\s*female)/i, FEM_V=/gadis|damayanti|google|female|jenny|aria|zira|samantha|sonia|libby|karen|moira/i;
-function pickVoice(){
-  if(!synth)return null;
-  const L=vEn()?'en':'id', vs=synth.getVoices().filter(v=>v.lang.toLowerCase().replace('_','-').startsWith(L));
-  const score=v=>(/natural|online/i.test(v.name)?4:0)+(FEM_V.test(v.name)?3:0)-(MALE_V.test(v.name)?10:0);
-  return vs.sort((a,b)=>score(b)-score(a))[0]||null;
-}
-if(synth)synth.onvoiceschanged=()=>{}; // voices load lazily; getVoices() is read again on every utterance
-function speak(text,done){
-  if(!synth||!voiceOut||!text){done&&done();return}
-  synth.cancel();
-  const u=new SpeechSynthesisUtterance(text), v=pickVoice();
-  if(v)u.voice=v;u.lang=v?v.lang:(vEn()?'en-US':'id-ID');u.rate=1.02;u.pitch=1.1;
-  let fin=false;const end=()=>{if(fin)return;fin=true;done&&done()};
-  u.onend=end;u.onerror=end;
-  synth.speak(u);
-}
-let mr=null; // the recorder of the Whisper fallback while it is capturing
-function stopVoice(){synth&&synth.cancel();if(rec){try{rec.abort()}catch(e){}}if(mr)mr.cancel()}
-// markdown reply -> a short sentence or two that sounds natural (tables and lists are skipped: they are for reading)
-function plainSpeech(md){
-  const lines=String(md||'').split('\n').filter(l=>l.trim()&&!/^\s*\|/.test(l)&&!/^\s*[-*•]\s/.test(l));
-  let s=lines.join(' ').replace(/\[([^\]]*)\]\([^)]*\)/g,'$1').replace(/[*_`#>|~]/g,'').replace(/\s+/g,' ').trim();
-  if(s.length>380){s=s.slice(0,380);const i=Math.max(s.lastIndexOf('. '),s.lastIndexOf('? '),s.lastIndexOf('! '));s=i>120?s.slice(0,i+1):s}
-  return s;
-}
-const spokenTime=(a,b)=>vEn()?`${a}:${b}`:`${T('pukul')} ${a}${b==='00'?'':' '+b}`;
-function spokenWhen(e){
-  const d=parse(e.date), day=`${fWdLong.format(d)}, ${d.getDate()} ${fMonthLong.format(d)}`;
-  let t=timeText(e);
-  t=t.replace(/(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})/,(_,a,b,c,dd)=>`${spokenTime(a,b)} ${T('sampai')} ${spokenTime(c,dd)}`)
-     .replace(/(\d{1,2}):(\d{2})/g,(_,a,b)=>spokenTime(a,b));
-  return `${day}, ${t}`;
-}
-function confirmSpeech(pend){
-  const parts=pend.slice(0,3).map(p=>{
-    const t=p.title||T('(tanpa judul)');
-    if(p.catOp)return T('Saya akan mengubah kategori {t}.',{t});
-    if(p.op==='tambah')return T('Saya akan menambahkan {t}, {w}.',{t,w:spokenWhen(p.next)});
-    if(p.op==='hapus')return T('Saya akan menghapus {t}.',{t});
-    return p.next&&(p.patch.date||p.patch.start||p.patch.end)?T('Saya akan mengubah {t} menjadi {w}.',{t,w:spokenWhen(p.next)}):T('Saya akan mengubah {t}.',{t});
-  });
-  if(pend.length>3)parts.push(T('Dan {n} perubahan lainnya.',{n:pend.length-3}));
-  if(pend.some(p=>p.status==='clash'))parts.push(T('Perhatian, ada jadwal yang bentrok.'));
-  parts.push(T('Apakah Anda ingin saya melakukannya? Katakan iya atau tidak.'));
-  return parts.join(' ');
-}
-// "iya" / "tidak" -> true / false; anything else (a number, "tapi", "ganti"...) is a new instruction -> null
-function yesNo(s){
-  s=String(s||'').toLowerCase().replace(/[.,!?]/g,' ').trim();
-  if(!s||/\d|\b(tapi|ganti|ubah|geser|pindah|but|change|move|instead)\b/.test(s)||s.split(/\s+/).length>5)return null;
-  if(/\b(tidak|nggak|enggak|gak|ga|jangan|batal\w*|tolak|no|nope|cancel|stop)\b/.test(s))return false;
-  if(/\b(iya|ya|yap|yup|yoi|boleh|oke|ok|okay|baik|benar|betul|setuju|lanjut\w*|silakan|silahkan|terapkan|sip|yes|yeah|yep|sure|confirm|do it|go ahead)\b/.test(s))return true;
-  return null;
-}
-const openProps=turn=>(turn?.proposals||[]).filter(p=>p.status==='pending'||p.status==='clash');
-async function voiceDecide(turn,yes){
-  const todo=openProps(turn);
-  if(!yes){todo.forEach(p=>p.status='rejected');renderAI();speak(T('Baik, tidak saya lakukan.'));return}
-  todo.forEach(p=>{if(p.status==='clash')p.status='pending'}); // an explicit "iya" also overrides a clash warning that was read aloud
-  await applyProposals(turn,todo.map(p=>p.key));
-  const n=todo.filter(p=>p.status==='applied').length;
-  speak(n?T('Sudah, {n} perubahan diterapkan.',{n}):T('Maaf, gagal menerapkan perubahan.'));
-}
-function routeVoice(text){
-  if(aiBusy)return;
-  const turn=[...aiTurns].reverse().find(t=>t.role==='assistant');
-  const ans=openProps(turn).length?yesNo(text):null;
-  $('aiInput').value='';
-  if(ans!==null){aiTurns.push({role:'user',content:text,shown:false});renderAI();voiceDecide(turn,ans);return}
-  voiceTurn=true;askAI(text);
-}
-function setListening(on){
-  listening=on;const b=$('aiMic');if(!b)return;
-  b.classList.toggle('rec',on);b.setAttribute('aria-pressed',on);
-  $('aiInput').placeholder=on?T('Mendengarkan…'):T('Tanya tentang jadwal Anda…');
-}
-// Brave and Firefox cannot use the browser's own recognizer (it needs Google's service): record the audio and let the
-// server transcribe it with Whisper instead. Chrome / Edge keep the live, word-by-word recognizer.
-const REC_OK=!!(navigator.mediaDevices?.getUserMedia&&window.MediaRecorder);
-let useRec=REC_OK&&(!SR||!!navigator.brave||store.get('agenda-stt')==='rec');
-const lastBot=()=>[...aiTurns].reverse().find(x=>x.role==='assistant');
-const noAnswer=()=>{if(openProps(lastBot()).length)speak(T('Saya tidak mendengar jawaban. Ketuk mikrofon lalu katakan iya atau tidak.'))};
-const micErr=name=>name==='NotAllowedError'||name==='SecurityError'
-  ?T('Izin mikrofon ditolak. Klik ikon gembok di sebelah alamat situs, lalu izinkan Mikrofon.')
-  :T('Mikrofon tidak ditemukan. Periksa apakah mikrofon terpasang dan tidak dipakai aplikasi lain.');
-async function listenRec(){
-  if(aiBusy)return;
-  stopVoice();
-  let stream;
-  try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}
-  catch(e){toast(micErr(e.name));return}
-  const mime=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus'].find(m=>MediaRecorder.isTypeSupported(m))||'';
-  let m;try{m=new MediaRecorder(stream,mime?{mimeType:mime}:undefined)}catch(e){stream.getTracks().forEach(t=>t.stop());toast(T('Suara tidak didukung browser ini. Gunakan Chrome atau Edge.'));return}
-  const chunks=[],AC=window.AudioContext||window.webkitAudioContext;
-  let ac=null,an=null,buf=null,timer=0,heard=false,quiet=0,send=true;const t0=Date.now();
-  try{ac=new AC();an=ac.createAnalyser();an.fftSize=1024;ac.createMediaStreamSource(stream).connect(an);buf=new Uint8Array(an.fftSize)}catch(e){ac=null}
-  const stop=()=>{if(m.state!=='inactive')m.stop()};
-  // stop by itself ~1.3 s after the person went quiet (or after 8 s of silence / 25 s in total)
-  if(ac)timer=setInterval(()=>{
-    an.getByteTimeDomainData(buf);let s=0;for(const v of buf)s+=(v-128)*(v-128);
-    const lvl=Math.sqrt(s/buf.length)/128, now=Date.now();
-    if(lvl>0.03){heard=true;quiet=0}else if(!quiet)quiet=now;
-    if((heard&&quiet&&now-quiet>1300)||(!heard&&now-t0>8000)||now-t0>25000)stop();
-  },100);
-  else{heard=true;setTimeout(stop,7000)} // no analyser: fixed 7 s window
-  m.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
-  m.onstop=async()=>{
-    clearInterval(timer);stream.getTracks().forEach(t=>t.stop());if(ac)ac.close().catch(()=>{});
-    mr=null;setListening(false);
-    if(!send)return;
-    if(!heard||!chunks.length){$('aiInput').placeholder=T('Tanya tentang jadwal Anda…');noAnswer();return}
-    $('aiInput').placeholder=T('Memproses suara…');
-    try{
-      const blob=new Blob(chunks,{type:m.mimeType||mime||'audio/webm'});
-      const b64=await new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result).split(',')[1]||'');fr.onerror=no;fr.readAsDataURL(blob)});
-      const d=await api('stt',{method:'POST',body:{audio:b64,mime:blob.type,lang:I18N.lang}});
-      $('aiInput').placeholder=T('Tanya tentang jadwal Anda…');
-      if(d?.text)routeVoice(d.text);else noAnswer();
-    }catch(e){$('aiInput').placeholder=T('Tanya tentang jadwal Anda…');toast(e.message||T('Terjadi gangguan. Coba kirim lagi.'))}
-  };
-  mr={stop,cancel:()=>{send=false;stop()}};
-  m.start();setListening(true);
-}
-function listen(){if(useRec)listenRec();else listenSR()}
-function listenSR(){
-  if(!SR){toast(T('Suara tidak didukung browser ini. Gunakan Chrome atau Edge.'));return}
-  if(aiBusy)return;
-  stopVoice();
-  const r=new SR();rec=r;r.lang=vEn()?'en-US':'id-ID';r.interimResults=true;r.continuous=false;r.maxAlternatives=1;
-  let fin='',err='';
-  r.onresult=e=>{let tmp='';for(let i=e.resultIndex;i<e.results.length;i++){const x=e.results[i];if(x.isFinal)fin+=x[0].transcript;else tmp+=x[0].transcript}$('aiInput').value=fin+tmp};
-  r.onerror=e=>{err=e.error||''};
-  r.onend=()=>{
-    setListening(false);if(rec===r)rec=null;
-    const t=fin.trim();
-    if(t){routeVoice(t);return}
-    $('aiInput').value='';
-    if(err==='not-allowed')toast(T('Izin mikrofon ditolak. Klik ikon gembok di sebelah alamat situs, lalu izinkan Mikrofon.'));
-    else if((err==='service-not-allowed'||err==='network')&&REC_OK){useRec=true;store.set('agenda-stt','rec');listenRec()} // the browser's recognizer is blocked or unreachable: switch to the Whisper fallback for good
-    else if(err==='service-not-allowed')toast(T('Browser ini memblokir layanan pengenalan suara. Coba Chrome atau Edge biasa (bukan Brave atau browser di dalam aplikasi).'));
-    else if(err==='audio-capture')toast(T('Mikrofon tidak ditemukan. Periksa apakah mikrofon terpasang dan tidak dipakai aplikasi lain.'));
-    else if(err==='network')toast(T('Layanan pengenalan suara tidak terjangkau. Periksa koneksi internet.'));
-    else if(err!=='aborted')noAnswer();
-  };
-  try{r.start();setListening(true)}catch(e){setListening(false)}
-}
-// after a voice-initiated turn: read the answer, or read the proposed change and wait for "iya" / "tidak"
-function voiceRespond(reply){
-  if(reply.error||(reply.content||'').startsWith('('))return speak(plainSpeech(reply.content));
-  const pend=openProps(reply);
-  if(pend.length)return speak(confirmSpeech(pend),()=>listen());
-  const txt=plainSpeech(reply.content)||(reply.proposals?.length?T('Usulan itu tidak bisa dijalankan. Periksa pesannya di layar.'):'');
-  speak(txt,()=>{if(/\?\s*$/.test(txt))listen()});
-}
-function renderSpeakBtn(){
-  const b=$('aiSpeak');if(!b)return;
-  b.querySelector('.ms').textContent=voiceOut?'volume_up':'volume_off';
-  b.setAttribute('aria-pressed',voiceOut);b.title=b.ariaLabel=voiceOut?T('Suara asisten: nyala'):T('Suara asisten: mati');
-  b.hidden=!synth;
-}
-if(!SR&&!REC_OK)$('aiMic').hidden=true;
-$('aiMic').onclick=()=>{if(listening){if(mr)mr.stop();else try{rec.stop()}catch(e){}}else listen()};
-$('aiSpeak').onclick=()=>{voiceOut=!voiceOut;store.set('agenda-voice',voiceOut?'1':'0');if(!voiceOut)synth&&synth.cancel();renderSpeakBtn()};
-renderSpeakBtn();
-addEventListener('pagehide',stopVoice);
 
 /* ---------- wiring ---------- */
 $('dAdd').onclick=()=>{const d=openDayStr;returnDay=d;$('dayOv').hidden=true;openForm(null,d)};
