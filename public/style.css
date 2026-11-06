@@ -294,6 +294,9 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 .att li{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:8px}
 .att li:first-child{border-top:0;padding-top:0}
 .att .acts{display:flex;gap:4px}
+.att .late{font-weight:500;color:#e8685f}
+.badge-late{display:inline-block;min-width:20px;padding:0 7px;margin-left:6px;border-radius:10px;background:#e8685f;color:#fff;font-size:12px;font-weight:600;line-height:20px;text-align:center;vertical-align:2px}
+.badge-late:empty{display:none}
 .up{list-style:none;margin:0;padding:0}
 .up li{display:grid;grid-template-columns:48px 1fr auto;gap:14px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
 .up li:first-child{border-top:0}

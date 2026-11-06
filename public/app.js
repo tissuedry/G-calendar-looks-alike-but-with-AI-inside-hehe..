@@ -415,7 +415,9 @@ function renderDashboard(){
 
   const from=ymd(addDays(now,-7));
   const att=ev.filter(e=>e.status==='rencana'&&e.date>=from&&isPast(e)&&!e.seriesId).sort(sortEv).reverse();
-  $('attList').innerHTML=att.length?att.slice(0,5).map(e=>`<li style="${catStyle(e.cat)}"><span class="ev" style="flex:1;min-width:0"><span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span><span class="sub">${fDayShort.format(parse(e.date))} · ${timeText(e)}</span></span></span>
+  const late=e=>{const d=Math.round((midnight(now)-parse(e.date))/864e5);return d<=0?T('Terlewat hari ini'):T('Telat {n} hari',{n:d})};
+  $('attCount').textContent=att.length||'';
+  $('attList').innerHTML=att.length?att.slice(0,5).map(e=>`<li style="${catStyle(e.cat)}"><button class="ev" data-open="${esc(e.id)}" style="flex:1;min-width:0"><span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span><span class="sub">${fDayShort.format(parse(e.date))} · ${timeText(e)} · <b class="late">${late(e)}</b></span></span></button>
     <span class="acts"><button class="btn tonal small" data-status="selesai" data-id="${esc(e.id)}">${T('Selesai')}</button><button class="btn text small" data-status="batal" data-id="${esc(e.id)}">${T('Batal')}</button></span></li>`).join('')+(att.length>5?`<li class="empty">${T('+{n} lainnya di tampilan Jadwal',{n:att.length-5})}</li>`:'')
     :`<li class="empty">${T('Semua kegiatan yang lewat sudah ditandai.')}</li>`;
 

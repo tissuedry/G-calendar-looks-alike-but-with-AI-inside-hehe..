@@ -164,7 +164,7 @@ Prompt memuat kegiatan terdekat (60 hari ke belakang dan ke depan), maksimal 100
 ```
 api/        auth.js  state.js  events.js  cats.js  ai.js     Vercel Serverless Functions
 lib/        http.js  auth.js   store.js   ai.js               logika bersama
-public/     index.html  style.css  app.js  i18n.js  favicon.svg  frontend (tanpa build; i18n.js = kamus Indonesia/Inggris)
+public/     index.html  style.css  app.js  i18n.js  favicon.png icon-192.png icon-512.png  frontend (tanpa build; i18n.js = kamus Indonesia/Inggris)
 supabase/   migrations/*.sql                                   skema database
 docs/       screenshots/                                       gambar untuk README
 dev-server.js                                                  server lokal yang meniru Vercel
