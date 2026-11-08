@@ -366,19 +366,19 @@ function renderDashboard(){
   const ms=ymd(new Date(now.getFullYear(),now.getMonth(),1)), me=ymd(new Date(now.getFullYear(),now.getMonth()+1,0));
   const todayEv=ev.filter(e=>e.date===today).sort(sortEv);
   const weekEv=inRange(ev,wsS,weS).filter(active), monthEv=inRange(ev,ms,me).filter(active);
-  const monthPast=monthEv.filter(e=>isPast(e)&&!(e.seriesId&&e.status==='rencana')), monthDone=monthPast.filter(e=>e.status==='selesai').length;
+  const monthPast=monthEv.filter(e=>e.status==='selesai'||(isPast(e)&&!(e.seriesId&&e.status==='rencana'))), monthDone=monthPast.filter(e=>e.status==='selesai').length;
   const pct=monthPast.length?Math.round(monthDone/monthPast.length*100):0;
   const in14=ymd(addDays(now,14));
   const upcoming=ev.filter(e=>active(e)&&(e.date>today||(e.date===today&&upM(e)>nowM))&&e.date<=in14).sort(sortEv);
   const sum=l=>l.reduce((a,e)=>a+dur(e),0);
   const monthName=fMonthLong.format(now);
-  const uEv=n=>T('kegiatan',{n}), uH=T('jam');
+  const uEv=n=>T('kegiatan',{n});
 
   $('stats').innerHTML=`
-    <div class="stat"><div class="label">${T('Hari ini')}</div><div class="value num">${todayEv.length}<small>${uEv(todayEv.length)}</small></div><div class="sub">${T('{n} tersisa · {h} jam',{n:todayEv.filter(e=>active(e)&&eM(e)>nowM).length,h:fmtH(sum(todayEv.filter(active)))})}</div></div>
-    <div class="stat"><div class="label">${T('Minggu ini')}</div><div class="value num">${fmtH(sum(weekEv))}<small>${uH}</small></div><div class="sub">${T('{n} kegiatan · {r}',{n:weekEv.length,r:rangeLabel(ws,addDays(ws,6))})}</div></div>
-    <div class="stat"><div class="label">${T('Bulan {m}',{m:esc(monthName)})}</div><div class="value num">${monthEv.length}<small>${uEv(monthEv.length)}</small></div><div class="sub">${T('{h} jam terjadwal',{h:fmtH(sum(monthEv))})}</div></div>
-    <div class="stat"><div class="label">${T('Terlaksana bulan ini')}</div><div class="value num">${monthDone}/${monthPast.length}</div><div class="meter" aria-hidden="true"><i style="width:${pct}%"></i></div><div class="sub">${monthPast.length?T('{p}% dari yang sudah lewat',{p:pct}):T('Belum ada yang lewat')}</div></div>
+    <div class="stat"><div class="label">${T('Hari ini')}</div><div class="value num">${todayEv.length}<small>${uEv(todayEv.length)}</small></div><div class="sub">${T('{n} tersisa',{n:todayEv.filter(e=>active(e)&&eM(e)>nowM).length})}</div></div>
+    <div class="stat"><div class="label">${T('Minggu ini')}</div><div class="value num">${weekEv.length}<small>${uEv(weekEv.length)}</small></div><div class="sub">${rangeLabel(ws,addDays(ws,6))}${sum(weekEv)?' · '+T('{h} jam berdurasi',{h:fmtH(sum(weekEv))}):''}</div></div>
+    <div class="stat"><div class="label">${T('Bulan {m}',{m:esc(monthName)})}</div><div class="value num">${monthEv.length}<small>${uEv(monthEv.length)}</small></div><div class="sub">${T('{a} sudah lewat · {b} akan datang',{a:monthEv.filter(isPast).length,b:monthEv.filter(e=>!isPast(e)).length})}</div></div>
+    <div class="stat"><div class="label">${T('Selesai bulan ini')}</div><div class="value num">${monthDone}/${monthPast.length}</div><div class="meter" aria-hidden="true"><i style="width:${pct}%"></i></div><div class="sub">${monthPast.length?T('{p}% dari yang sudah jatuh tempo',{p:pct})+(monthPast.length>monthDone?` · <b class="late">${T('{n} belum ditandai',{n:monthPast.length-monthDone})}</b>`:` · ${T('semua sudah ditandai')}`):T('Belum ada yang jatuh tempo')}</div></div>
     <div class="stat"><div class="label">${T('14 hari ke depan')}</div><div class="value num">${upcoming.length}<small>${uEv(upcoming.length)}</small></div><div class="sub">${upcoming[0]?T('Berikutnya: {t}',{t:esc(upcoming[0].title)}):T('Kosong')}</div></div>`;
 
   // friendly one-paragraph summary of the day
@@ -394,7 +394,8 @@ function renderDashboard(){
   if(!ev.length){hmsg.length=0;hmsg.push(T('Belum ada kegiatan. Klik <b>Buat</b>, atau minta Asisten AI menambahkannya, misalnya: "tambah rapat besok jam 10".'))}
   $('hello').innerHTML=`<div class="hdate">${fDay.format(now)}</div><h2>${greet}</h2><p>${hmsg.join(' ')}</p>`;
 
-  $('todayMeta').textContent=todayEv.length?T('{h} jam terjadwal',{h:fmtH(sum(todayEv.filter(active)))}):'';
+  const todayH=sum(todayEv.filter(active));
+  $('todayMeta').textContent=todayH?T('{h} jam berdurasi',{h:fmtH(todayH)}):'';
   let nextMarked=false;
   $('todayList').innerHTML=todayEv.length?todayEv.map(e=>{
     const en=eM(e),isNow=!!e.start&&mins(e.start)<=nowM&&nowM<en&&active(e);
@@ -407,10 +408,11 @@ function renderDashboard(){
 
   document.querySelectorAll('#catRangeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.range===catRange));
   const src=catRange==='week'?weekEv:monthEv;
-  const byCat={};src.forEach(e=>{const k=catKey(e.cat);byCat[k]=(byCat[k]||0)+dur(e)});
+  // counted by number of events, not hours: many events have no end time, so their duration is 0 and would vanish
+  const byCat={};src.forEach(e=>{const k=catKey(e.cat);byCat[k]=(byCat[k]||0)+1});
   const ids=catOrder(byCat).sort((a,b)=>byCat[b]-byCat[a]);
-  const max=Math.max(60,...Object.values(byCat)), tot=sum(src)||1;
-  $('catBars').innerHTML=ids.length?ids.map(id=>`<div class="catrow" style="${catStyle(id)}" title="${T('{p}% dari total',{p:Math.round(byCat[id]/tot*100)})}"><span class="catdot">${esc(catLabel(id))}</span><div class="track"><div class="fill" style="width:${byCat[id]/max*100}%"></div></div><span class="h num">${fmtH(byCat[id])} ${T('j')}</span></div>`).join('')
+  const max=Math.max(1,...Object.values(byCat)), tot=src.length||1;
+  $('catBars').innerHTML=ids.length?ids.map(id=>`<div class="catrow" style="${catStyle(id)}" title="${T('{p}% dari total',{p:Math.round(byCat[id]/tot*100)})}"><span class="catdot">${esc(catLabel(id))}</span><div class="track"><div class="fill" style="width:${byCat[id]/max*100}%"></div></div><span class="h num">${byCat[id]}</span></div>`).join('')
     :`<div class="empty">${catRange==='week'?T('Belum ada kegiatan minggu ini.'):T('Belum ada kegiatan bulan ini.')}</div>`;
 
   const from=ymd(addDays(now,-7));
@@ -431,15 +433,15 @@ function renderDashboard(){
 
   const ws2=addDays(ws,weekOff*7), days=[...Array(7)].map((_,i)=>addDays(ws2,i));
   const wEv=inRange(ev,ymd(ws2),ymd(days[6])).filter(active);
-  const per=days.map(d=>{const s=ymd(d),l=wEv.filter(e=>e.date===s),byC={};l.forEach(e=>{const k=catKey(e.cat);byC[k]=(byC[k]||0)+dur(e)});return {d,s,total:sum(l),byC}});
-  const wmax=Math.max(240,...per.map(p=>p.total));
+  const per=days.map(d=>{const s=ymd(d),l=wEv.filter(e=>e.date===s),byC={};l.forEach(e=>{const k=catKey(e.cat);byC[k]=(byC[k]||0)+1});return {d,s,total:l.length,byC}});
+  const wmax=Math.max(4,...per.map(p=>p.total));
   const label=weekOff===0?T('Minggu ini'):weekOff===1?T('Minggu depan'):weekOff===-1?T('Minggu lalu'):(weekOff>0?T('{n} minggu lagi',{n:weekOff}):T('{n} minggu lalu',{n:-weekOff}));
   $('weekRange').textContent=rangeLabel(ws2,days[6]);
   $('wNow').disabled=weekOff===0;
   const busiest=per.reduce((a,b)=>b.total>a.total?b:a,per[0]);
-  $('weekMeta').textContent=label+' · '+fmtH(sum(wEv))+' '+uH+(busiest.total?' · '+T('terpadat {d}',{d:fWd.format(busiest.d)}):'');
-  $('weekLoad').innerHTML=per.map(p=>`<button class="wday ${p.s===today?'today':''}" data-day="${p.s}" title="${fDayShort.format(p.d)}: ${fmtH(p.total)} ${uH}">
-    <span class="hrs num">${p.total?fmtH(p.total):'–'}</span>
+  $('weekMeta').textContent=label+' · '+T('{n} kegiatan',{n:wEv.length})+(busiest.total?' · '+T('terpadat {d}',{d:fWd.format(busiest.d)}):'');
+  $('weekLoad').innerHTML=per.map(p=>`<button class="wday ${p.s===today?'today':''}" data-day="${p.s}" title="${fDayShort.format(p.d)}: ${T('{n} kegiatan',{n:p.total})}">
+    <span class="hrs num">${p.total||'–'}</span>
     <span class="col">${catOrder(p.byC).map(id=>`<i style="${catStyle(id)};background:var(--cat);height:${p.byC[id]/wmax*100}%"></i>`).join('')}</span>
     <span class="dn">${fWd.format(p.d)} ${p.d.getDate()}</span></button>`).join('');
   const usedIds=[...new Set(per.flatMap(p=>catOrder(p.byC)))];
@@ -1191,10 +1193,14 @@ function renderAI(){
     return;
   }
   log.innerHTML=aiTurns.map((t,ti)=>{
-    if(t.role==='user')return `<div class="msg user${t.shown?'':' new'}">${esc(t.content)}</div>`;
+    if(t.role==='user'){
+      const pics=t.pics?.length?`<div class="upics">${t.pics.map(p=>`<img src="${p.src}" alt="">`).join('')}</div>`:'';
+      return `<div class="msg user${t.shown?'':' new'}">${pics}${esc(t.content)}</div>`;
+    }
     const props=t.proposals?.length&&!t.pending?proposalsHtml(t,ti):'';
     const via=t.via&&!t.pending?`<div class="via"><span class="ms">auto_awesome</span>${esc(t.via)}${t.model?' · '+esc(t.model):''}${t.asked&&aiProviders&&t.via!==provName(t.asked)?' · '+esc(T('dialihkan otomatis karena {p} tidak tersedia',{p:provName(t.asked)})):''}</div>`:'';
-    return `<div class="msg bot ${t.error?'err':''}${props?' has-props':''}${t.shown?'':' new'}">${t.pending?`<span class="thinking">${T('Sedang menganalisis…')}</span>`:md(t.content||(props?T('Periksa usulan di bawah, lalu tekan Terapkan.'):''))}${props}${via}</div>`;
+    const img=t.image?`<div class="aimg"><img src="${t.image.src}" alt=""><div class="aimg-acts"><button type="button" class="btn small tonal" data-aact="copy-img" data-aturn="${ti}">${T('Salin gambar')}</button><a class="btn small text" href="${t.image.src}" download="gambar.png">${T('Unduh')}</a></div></div>`:'';
+    return `<div class="msg bot ${t.error?'err':''}${props?' has-props':''}${t.shown?'':' new'}">${t.pending?`<span class="thinking">${T('Sedang menganalisis…')}</span>`:img+md(t.content||(props?T('Periksa usulan di bawah, lalu tekan Terapkan.'):''))}${props}${via}</div>`;
   }).join('');
   $('aiChipRow').innerHTML=chipBtns(false);
   aiTurns.forEach(t=>t.shown=true); // only brand-new bubbles animate in
@@ -1208,13 +1214,45 @@ const CHANGE_RE=/\b(tambah\w*|bikin\w*|buatkan|buat\s+(?:jadwal|kegiatan|acara|r
 const QUESTION_RE=/\?\s*$|^\s*(apa|apakah|siapa|kapan|dimana|di mana|berapa|bagaimana|gimana|mengapa|kenapa|what|which|when|where|who|how|why|is there|are there|do i have)\b|\b(apa saja|hari apa|tanggal berapa|berapa)\b/i;
 const HAS_DATE_RE=/\b(besok|lusa|hari ini|nanti|minggu depan|bulan depan|senin|selasa|rabu|kamis|jumat|jum'at|sabtu|tgl|tanggal\s*\d|\d{1,2}\s*(?:jan|feb|mar|apr|mei|jun|jul|agu|sep|okt|nov|des)\w*|tomorrow|today|next (?:week|month)|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
 const wantsChange=s=>CHANGE_RE.test(s)||(HAS_DATE_RE.test(s)&&!QUESTION_RE.test(s))||/\b\d{1,2}[:.]\d{2}\b|\b(?:jam|pukul|at)\s*\d{1,2}\b/i.test(s)||s.length>300||/\n\s*[*•-]\s/.test(s);
+// picture requests go to Gemini's image model when the chat is set to Gemini
+const IMG_RE=/\b(gambar|foto|ilustrasi|picture|image|poster|logo)\b/i, MAKE_RE=/\b(buat\w*|bikin|generate|create|gambarkan|lukis\w*|desain)\b/i;
+const wantsImage=s=>aiProv==='gemini'&&MAKE_RE.test(s)&&IMG_RE.test(s);
+async function askImage(text){
+  aiTurns.push({role:'user',content:text});
+  const reply={role:'assistant',content:'',pending:true,asked:'gemini',image:null};aiTurns.push(reply);
+  aiBusy=true;$('aiStop').hidden=true;$('aiSend').disabled=true;renderAI();
+  try{
+    const d=await api('image',{method:'POST',body:{prompt:text}});
+    reply.image={src:`data:${d.mime};base64,${d.image}`,mime:d.mime};
+    reply.content=d.text||'';reply.via='Gemini';reply.model='gemini-2.5-flash-image';
+  }catch(e){reply.content=e.message||T('Terjadi gangguan. Coba kirim lagi.');reply.error=true}
+  finally{reply.pending=false;aiBusy=false;$('aiSend').disabled=false;renderAI();$('aiLog').lastElementChild?.scrollIntoView({block:'nearest'})}
+}
+// clipboard wants PNG; the model may answer in another format, so the picture is redrawn on a canvas first
+function imgToPng(src){
+  return new Promise((ok,no)=>{
+    const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext('2d').drawImage(im,0,0);c.toBlob(b=>b?ok(b):no(new Error('png')),'image/png')};
+    im.onerror=no;im.src=src;
+  });
+}
+async function copyImage(turn){
+  const src=turn?.image?.src;if(!src)return;
+  try{
+    if(!navigator.clipboard?.write||!window.ClipboardItem)throw new Error('unsupported');
+    const png=await imgToPng(src);
+    await navigator.clipboard.write([new ClipboardItem({'image/png':png})]);
+    toast(T('Gambar disalin'));
+  }catch(e){toast(T('Browser ini tidak bisa menyalin gambar. Gunakan Unduh.'))}
+}
 async function askAI(text,opts={}){
   if(aiBusy||!text.trim())return;
+  if(!aiPics.length&&wantsImage(text))return askImage(text);
+  const pics=aiPics;aiPics=[];renderPics(); // pictures attached to this message; they are not re-sent with later questions
   const lastBot=[...aiTurns].reverse().find(t=>t.role==='assistant');
   // a follow-up keeps the tool: to proposals ("yang pertama saja"), or to a question the assistant asked while in
   // change mode ("bentrok dengan A, mau bagaimana?" -> "geser saja ke Kamis")
   const useTools=opts.tools??(wantsChange(text)||!!lastBot?.proposals?.length||(!!lastBot?.toolMode&&/\?\s*$/.test((lastBot.content||'').trim())));
-  aiTurns.push({role:'user',content:text});
+  aiTurns.push({role:'user',content:text,pics});
   const reply={role:'assistant',content:'',pending:true,asked:aiProv,toolMode:useTools};aiTurns.push(reply);
   aiBusy=true;$('aiStop').hidden=false;$('aiSend').disabled=true;renderAI();
   // earlier proposals are summarised with their outcome, so the model knows what was applied or rejected
@@ -1232,7 +1270,7 @@ async function askAI(text,opts={}){
   bubble()?.scrollIntoView({block:'end'});
   try{
     const context=aiContext(useTools)+propNote; // aiContext also rebuilds the #ref -> event id map used by buildProposals
-    const r=await fetch('/api/ai',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:context,messages:hist,provider:aiProv||undefined,lang:I18N.lang,tools:useTools}),signal:aiCtl.signal});
+    const r=await fetch('/api/ai',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:context,messages:hist,provider:aiProv||undefined,lang:I18N.lang,tools:useTools,images:pics.length?pics.map(p=>({mime:p.mime,data:p.src.split(',')[1]})):undefined}),signal:aiCtl.signal});
     if(!r.ok){let d={};try{d=await r.json()}catch(e){}if(r.status===401)showLogin();const er=new Error(d.error?TS(d.error):T('Terjadi gangguan ({n}).',{n:r.status}));er.code=d.code;throw er}
     reply.via=r.headers.get('X-AI-Provider')||'';reply.model=r.headers.get('X-AI-Model')||'';
     const onLine=line=>{
@@ -1290,14 +1328,64 @@ $('navAI').onclick=()=>setAI(true);
 $('tabAI').onclick=()=>setAI($('aiPanel').hidden);
 $('aiBtn').onclick=()=>setAI($('aiPanel').hidden);
 $('aiClose').onclick=()=>setAI(false);
-$('aiForm').addEventListener('submit',e=>{e.preventDefault();const v=$('aiInput').value;$('aiInput').value='';$('aiInput').style.height='auto';askAI(v)});
+$('aiForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  let v=$('aiInput').value;
+  if(!v.trim()&&aiPics.length)v=T('Tolong analisis gambar ini.'); // a picture with no words still gets a question
+  if(aiBusy||!v.trim())return;
+  $('aiInput').value='';$('aiInput').style.height='auto';askAI(v);
+});
 $('aiInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();$('aiForm').requestSubmit()}});
 $('aiInput').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(140,e.target.scrollHeight)+'px'});
 $('aiStop').onclick=()=>aiCtl?.abort();
-$('aiReset').onclick=()=>{if(aiBusy)aiCtl?.abort();aiTurns=[];renderAI()};
+$('aiReset').onclick=()=>{if(aiBusy)aiCtl?.abort();aiTurns=[];aiPics=[];renderPics();renderAI()};
+
+/* ---------- attach pictures: paste (Ctrl+V), pick a file, or drag onto the panel; Gemini reads them ---------- */
+const MAX_PICS=3, PIC_SIDE=1400;
+let aiPics=[]; // [{src: data URL (JPEG, shrunk), mime}]
+function shrinkImage(file){
+  return new Promise((ok,no)=>{
+    const url=URL.createObjectURL(file), im=new Image();
+    im.onload=()=>{
+      const k=Math.min(1,PIC_SIDE/Math.max(im.naturalWidth,im.naturalHeight)), c=document.createElement('canvas');
+      c.width=Math.max(1,Math.round(im.naturalWidth*k));c.height=Math.max(1,Math.round(im.naturalHeight*k));
+      const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height); // PNGs with transparency would turn black as JPEG
+      g.drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(url);
+      ok({src:c.toDataURL('image/jpeg',0.85),mime:'image/jpeg'});
+    };
+    im.onerror=()=>{URL.revokeObjectURL(url);no(new Error('decode'))};
+    im.src=url;
+  });
+}
+async function addPics(files){
+  const imgs=[...files].filter(f=>f&&/^image\//.test(f.type));
+  if(!imgs.length)return;
+  const room=MAX_PICS-aiPics.length;
+  if(room<=0){toast(T('Maksimal {n} gambar per pesan.',{n:MAX_PICS}));return}
+  if(imgs.length>room)toast(T('Maksimal {n} gambar per pesan.',{n:MAX_PICS}));
+  for(const f of imgs.slice(0,room)){
+    try{aiPics.push(await shrinkImage(f))}catch(e){toast(T('Gambar tidak bisa dibaca.'))}
+  }
+  renderPics();
+}
+function renderPics(){
+  const box=$('aiAttach');if(!box)return;
+  box.hidden=!aiPics.length;
+  box.innerHTML=aiPics.map((p,i)=>`<span class="th"><img src="${p.src}" alt=""><button type="button" class="x" data-rmpic="${i}" aria-label="${T('Hapus gambar')}" title="${T('Hapus gambar')}"><span class="ms">close</span></button></span>`).join('');
+}
+$('aiAttach').addEventListener('click',e=>{const b=e.target.closest('[data-rmpic]');if(b){aiPics.splice(+b.dataset.rmpic,1);renderPics()}});
+$('aiPick').onclick=()=>$('aiFile').click();
+$('aiFile').addEventListener('change',e=>{addPics(e.target.files);e.target.value=''});
+$('aiInput').addEventListener('paste',e=>{
+  const files=[...(e.clipboardData?.items||[])].filter(i=>i.kind==='file'&&/^image\//.test(i.type)).map(i=>i.getAsFile());
+  if(files.length){e.preventDefault();addPics(files)} // plain text pastes are left alone
+});
+$('aiPanel').addEventListener('dragover',e=>{if([...(e.dataTransfer?.types||[])].includes('Files'))e.preventDefault()});
+$('aiPanel').addEventListener('drop',e=>{if(e.dataTransfer?.files?.length){e.preventDefault();addPics(e.dataTransfer.files)}});
 $('aiPanel').addEventListener('click',e=>{
   const b=e.target.closest('[data-chip]');if(b){askAI(T(AI_CHIPS[+b.dataset.chip].p),{tools:false});return}
   const ab=e.target.closest('[data-aact]');if(!ab)return;
+  if(ab.dataset.aact==='copy-img'){copyImage(aiTurns[+ab.dataset.aturn]);return}
   const turn=aiTurns[+ab.dataset.aturn];if(!turn?.proposals)return;
   const act=ab.dataset.aact,key=ab.dataset.akey;
   if(act==='apply')applyProposals(turn,[key]);

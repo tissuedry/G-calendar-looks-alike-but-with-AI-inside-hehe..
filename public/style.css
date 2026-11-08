@@ -294,7 +294,7 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 .att li{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:8px}
 .att li:first-child{border-top:0;padding-top:0}
 .att .acts{display:flex;gap:4px}
-.att .late{font-weight:500;color:#e8685f}
+.att .late,.stat .late{font-weight:500;color:#e8685f}
 .badge-late{display:inline-block;min-width:20px;padding:0 7px;margin-left:6px;border-radius:10px;background:#e8685f;color:#fff;font-size:12px;font-weight:600;line-height:20px;text-align:center;vertical-align:2px}
 .badge-late:empty{display:none}
 .up{list-style:none;margin:0;padding:0}
@@ -359,6 +359,17 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 .composer{display:flex;gap:4px;align-items:flex-end;margin:0 12px;padding:4px 4px 4px 16px;background:var(--surface-2);border-radius:24px}
 .composer textarea{flex:1;min-width:0;resize:none;min-height:40px;max-height:140px;background:none;border:0;outline:0;padding:9px 0}
 .composer .send .ms{color:var(--accent)}
+.ai-attach{display:flex;gap:10px;flex-wrap:wrap;margin:0 12px 8px;padding:0 4px}
+.ai-attach[hidden]{display:none}
+.ai-attach .th{position:relative}
+.ai-attach img{display:block;width:56px;height:56px;object-fit:cover;border-radius:10px}
+.ai-attach .x{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:0;display:grid;place-items:center;background:var(--surface-2);color:var(--muted);box-shadow:0 0 0 1px var(--line)}
+.ai-attach .x .ms{font-size:14px}
+.msg.user .upics{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.msg.user .upics img{display:block;max-width:150px;max-height:150px;border-radius:10px}
+.aimg{margin-bottom:8px}
+.aimg img{display:block;max-width:100%;height:auto;border-radius:12px}
+.aimg-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .ai-note{font-size:.72rem;color:var(--faint);padding:8px 16px 12px;margin:0}
 
 /* ---------- overlays ---------- */

@@ -38,7 +38,7 @@ Berjalan gratis di **Vercel** (frontend + API), data di **Supabase** (Postgres),
 
 **Dashboard**
 - Sapaan dan ringkasan hari ini, kartu statistik (hari ini, minggu ini, bulan ini, tingkat terlaksana, 14 hari ke depan).
-- Waktu per kategori, kegiatan yang belum ditandai, daftar mendatang, dan kepadatan mingguan.
+- Kegiatan per kategori (dihitung per jumlah kegiatan, bukan jam), kegiatan terlewat yang belum ditandai, daftar mendatang, dan kepadatan mingguan.
 
 **Asisten AI**
 - Analisis cepat (ringkasan minggu, evaluasi bulan, keseimbangan, hari terlalu padat, cari waktu kosong) atau tanya bebas.

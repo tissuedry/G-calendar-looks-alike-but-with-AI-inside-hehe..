@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=add,auto_awesome,calendar_month,check,check_circle,chevron_left,chevron_right,close,dashboard,delete,edit,event_repeat,expand_more,logout,menu,notes,refresh,schedule,search,sell,send,settings,stop&display=block">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=add,auto_awesome,calendar_month,check,check_circle,chevron_left,chevron_right,close,dashboard,delete,edit,event_repeat,expand_more,image,logout,menu,notes,refresh,schedule,search,sell,send,settings,stop&display=block">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -101,7 +101,7 @@
           </div>
           <div class="stack">
             <div class="card">
-              <div class="sh"><h2>Waktu per kategori</h2>
+              <div class="sh"><h2>Kegiatan per kategori</h2>
                 <div class="right">
                   <div class="seg" id="catRangeSeg"><button data-range="week" aria-pressed="true">Minggu ini</button><button data-range="month" aria-pressed="false">Bulan ini</button></div>
                   <button class="btn text small" data-act="cats">Kelola</button>
@@ -154,8 +154,11 @@
         <div class="log" id="aiLog"></div>
       </div>
       <div class="ai-chiprow" id="aiChipRow"></div>
+      <div class="ai-attach" id="aiAttach" hidden></div>
       <form class="composer" id="aiForm">
         <textarea id="aiInput" rows="1" placeholder="Tanya tentang jadwal Anda…" aria-label="Pesan ke asisten"></textarea>
+        <input type="file" id="aiFile" accept="image/*" multiple hidden>
+        <button type="button" class="icon-btn" id="aiPick" aria-label="Lampirkan gambar" title="Lampirkan gambar (atau tempel dengan Ctrl+V)"><span class="ms">image</span></button>
         <button type="button" class="icon-btn" id="aiStop" aria-label="Hentikan" title="Hentikan" hidden><span class="ms">stop</span></button>
         <button type="submit" class="icon-btn send" id="aiSend" aria-label="Kirim" title="Kirim"><span class="ms">send</span></button>
       </form>
