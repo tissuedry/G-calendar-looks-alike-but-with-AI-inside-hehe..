@@ -429,8 +429,9 @@ function renderDashboard(){
     :`<div class="empty">${catRange==='week'?T('Belum ada kegiatan minggu ini.'):T('Belum ada kegiatan bulan ini.')}</div>`;
 
   const from=ymd(addDays(now,-7));
-  const att=ev.filter(e=>e.status==='rencana'&&!e.cont&&(e.endDate||e.date)>=from&&isPast(e)&&!e.seriesId).sort(sortEv).reverse();
-  const late=e=>{const d=Math.round((midnight(now)-parse(e.endDate||e.date))/864e5);return d<=0?T('Terlewat hari ini'):T('Telat {n} hari',{n:d})};
+  // unmarked past events (last 7 days) plus postponed ones, so every item counted as "belum ditandai" can be seen here
+  const att=ev.filter(e=>!e.cont&&isPast(e)&&((e.status==='rencana'&&(e.endDate||e.date)>=from&&!e.seriesId)||e.status==='tunda')).sort(sortEv).reverse();
+  const late=e=>{if(e.status==='tunda')return T('Ditunda');const d=Math.round((midnight(now)-parse(e.endDate||e.date))/864e5);return d<=0?T('Terlewat hari ini'):T('Telat {n} hari',{n:d})};
   $('attCount').textContent=att.length||'';
   $('attList').innerHTML=att.length?att.slice(0,5).map(e=>`<li style="${catStyle(e.cat)}"><button class="ev" data-open="${esc(e.id)}" style="flex:1;min-width:0"><span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span><span class="sub">${fDayShort.format(parse(e.date))} · ${timeText(e)} · <b class="late">${late(e)}</b></span></span></button>
     <span class="acts"><button class="btn tonal small" data-status="selesai" data-id="${esc(e.id)}">${T('Selesai')}</button><button class="btn text small" data-status="batal" data-id="${esc(e.id)}">${T('Batal')}</button></span></li>`).join('')+(att.length>5?`<li class="empty">${T('+{n} lainnya di tampilan Jadwal',{n:att.length-5})}</li>`:'')
@@ -481,7 +482,13 @@ function repStats(p){
   const planned=act.filter(e=>e.status==='rencana'&&!dueSet.has(e)).length;
   return {all,act,seg:segs.filter(active),due,done,late,postponed,planned,cancelled:all.length-act.length,pct:due.length?Math.round(done.length/due.length*100):0};
 }
-let repText='',repAIText='';
+let repText='',repAIText='',repVerdict='fair';
+// fixed rule so the same numbers always give the same verdict (the model does not decide it)
+function calcVerdict(s){
+  if(!s.due.length)return 'fair';
+  const miss=(s.late.length+s.postponed.length)/s.due.length;
+  return s.pct>=80&&miss<=.2?'good':s.pct<50||miss>=.4?'attention':'fair';
+}
 function renderReport(){
   const p=repPeriod(repOff),s=repStats(p),pv=repStats(repPeriod(repOff-1)),isW=repMode==='week';
   const range=isW?rangeLabel(p.a,p.b):fMonthLong.format(p.a)+' '+p.a.getFullYear();
@@ -490,6 +497,7 @@ function renderReport(){
   document.querySelectorAll('#repSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.rmode===repMode));
   if(!s.all.length){repText='';repAIText='';repKey='';$('repBody').innerHTML=`<div class="empty">${T('Belum ada kegiatan di periode ini.')}</div>`;return}
 
+  repVerdict=calcVerdict(s);
   // 1. one-sentence summary
   const w=T(isW?'minggu lalu':'bulan lalu'),parts=[];
   parts.push(s.due.length?T('{a} dari {b} kegiatan yang jatuh tempo selesai ({p}%)',{a:s.done.length,b:s.due.length,p:s.pct}):T('Belum ada yang jatuh tempo'));
@@ -617,7 +625,7 @@ async function runRepAI(){
   const key=repKey;if(!repText||repBusy.has(key))return;
   repBusy.add(key);repAIErr='';renderRepAI();
   try{
-    const d=await api('report',{method:'POST',body:{text:repAIText,kind:repMode,current:repOff===0,lang:I18N.lang,provider:aiProv||undefined}});
+    const d=await api('report',{method:'POST',body:{text:repAIText,kind:repMode,current:repOff===0,verdict:repVerdict,lang:I18N.lang,provider:aiProv||undefined}});
     repAICache.set(key,d);
   }catch(e){repAIErr=e.message||T('Terjadi gangguan. Coba kirim lagi.')}
   finally{repBusy.delete(key);if(key===repKey)renderRepAI()}
