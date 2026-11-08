@@ -460,33 +460,48 @@ function repStats(p){
   const isPast=e=>e.date<today||(e.date===today&&eM(e)<=nowM);
   const all=inRange(events(),ymd(p.a),ymd(p.b)),act=all.filter(active);
   // same rule as the "Selesai bulan ini" card: due = marked done, or already over (recurring plans that were never touched don't count)
-  const due=act.filter(e=>e.status==='selesai'||(isPast(e)&&!(e.seriesId&&e.status==='rencana')));
-  const done=due.filter(e=>e.status==='selesai');
-  return {all,act,due,done,late:due.filter(e=>e.status!=='selesai').sort(sortEv),pct:due.length?Math.round(done.length/due.length*100):0};
+  const due=act.filter(e=>e.status==='selesai'||(isPast(e)&&!(e.seriesId&&e.status==='rencana'))),dueSet=new Set(due);
+  const done=act.filter(e=>e.status==='selesai');
+  // "postponed" is a conscious choice, "late" is a plan that was simply never marked
+  const postponed=act.filter(e=>e.status==='tunda').sort(sortEv);
+  const late=due.filter(e=>e.status==='rencana').sort(sortEv);
+  const planned=act.filter(e=>e.status==='rencana'&&!dueSet.has(e)).length;
+  return {all,act,due,done,late,postponed,planned,cancelled:all.length-act.length,pct:due.length?Math.round(done.length/due.length*100):0};
 }
+let repText='';
 function renderReport(){
   const p=repPeriod(repOff),s=repStats(p),pv=repStats(repPeriod(repOff-1)),isW=repMode==='week';
-  $('repRange').textContent=isW?rangeLabel(p.a,p.b):fMonthLong.format(p.a)+' '+p.a.getFullYear();
+  const range=isW?rangeLabel(p.a,p.b):fMonthLong.format(p.a)+' '+p.a.getFullYear();
+  $('repRange').textContent=range;
   $('rNow').disabled=repOff===0;
   document.querySelectorAll('#repSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.rmode===repMode));
-  if(!s.all.length){$('repBody').innerHTML=`<div class="empty">${T('Belum ada kegiatan di periode ini.')}</div>`;return}
-  const sgn=n=>n>0?'+'+n:String(n);
+  if(!s.all.length){repText='';$('repBody').innerHTML=`<div class="empty">${T('Belum ada kegiatan di periode ini.')}</div>`;return}
+
+  // 1. one-sentence summary
+  const w=T(isW?'minggu lalu':'bulan lalu'),parts=[];
+  parts.push(s.due.length?T('{a} dari {b} kegiatan yang jatuh tempo selesai ({p}%)',{a:s.done.length,b:s.due.length,p:s.pct}):T('Belum ada yang jatuh tempo'));
+  if(s.due.length&&pv.due.length){const d=s.pct-pv.pct;parts.push(d>0?T('naik {n} poin dari {w}',{n:d,w}):d<0?T('turun {n} poin dari {w}',{n:-d,w}):T('sama dengan {w}',{w}))}
+  const extra=[s.postponed.length&&T('{n} ditunda',{n:s.postponed.length}),s.late.length&&T('{n} belum ditandai',{n:s.late.length})].filter(Boolean);
+  const sentence=parts.join(', ')+'.'+(extra.length?' '+extra.join(', ')+'.':'');
 
   const tiles=`<div class="repstats">
-    <div class="stat"><div class="label">${T('Total kegiatan')}</div><div class="value num">${s.act.length}</div><div class="sub">${s.all.length>s.act.length?T('{n} dibatalkan',{n:s.all.length-s.act.length}):''}</div></div>
+    <div class="stat"><div class="label">${T('Total kegiatan')}</div><div class="value num">${s.act.length}</div><div class="sub">${s.cancelled?T('{n} dibatalkan',{n:s.cancelled}):''}</div></div>
     <div class="stat"><div class="label">${T('Selesai')}</div><div class="value num">${s.done.length}/${s.due.length}</div><div class="meter" aria-hidden="true"><i style="width:${s.pct}%"></i></div><div class="sub">${s.due.length?T('{p}% dari yang sudah jatuh tempo',{p:s.pct}):T('Belum ada yang jatuh tempo')}</div></div>
-    <div class="stat"><div class="label">${T('Belum ditandai')}</div><div class="value num">${s.late.length}</div><div class="sub">${s.late.length?`<b class="late">${T('sudah lewat, belum selesai')}</b>`:T('semua sudah ditandai')}</div></div>
-    <div class="stat"><div class="label">${T('Akan datang')}</div><div class="value num">${s.act.length-s.due.length}</div><div class="sub">${T('belum jatuh tempo')}</div></div></div>`;
+    <div class="stat"><div class="label">${T('Belum ditandai')}</div><div class="value num">${s.late.length}</div><div class="sub">${s.late.length?`<b class="late">${T('sudah lewat')}</b>`:T('semua sudah ditandai')}</div></div>
+    <div class="stat"><div class="label">${T('Ditunda')}</div><div class="value num">${s.postponed.length}</div><div class="sub">${s.postponed.length?T('perlu dijadwalkan ulang'):T('tidak ada')}</div></div></div>`;
 
-  const w=T(isW?'minggu lalu':'bulan lalu');
-  const cmp=pv.act.length
-    ?T('Dibanding {w}: jumlah kegiatan {d}, persen selesai {e}.',{w,d:sgn(s.act.length-pv.act.length),e:s.due.length&&pv.due.length?sgn(s.pct-pv.pct)+' '+T('poin'):'–'})
-    :T('Belum ada kegiatan di {w} untuk dibandingkan.',{w});
+  // 2. did the plan happen? one stacked bar over every status
+  const segs=[[s.done.length,'Selesai','var(--ok)'],[s.postponed.length,'Ditunda','var(--warn)'],[s.cancelled,'Dibatalkan','var(--faint)'],[s.late.length,'Belum ditandai','var(--bad)'],[s.planned,'Masih rencana','color-mix(in srgb,var(--ink) 22%,transparent)']].filter(x=>x[0]);
+  const stack=`<div class="stk" role="img" aria-label="${esc(segs.map(x=>T(x[1])+' '+x[0]).join(', '))}">${segs.map(x=>`<i style="width:${x[0]/s.all.length*100}%;background:${x[2]}"></i>`).join('')}</div><div class="stkleg">${segs.map(x=>`<span style="--c:${x[2]}">${T(x[1])} ${x[0]}</span>`).join('')}</div>`;
 
+  // 3. where did the time go: events and scheduled hours per category
   const byCat={};
-  s.act.forEach(e=>{const k=catKey(e.cat),c=byCat[k]||(byCat[k]={t:0,d:0});c.t++;if(e.status==='selesai')c.d++});
+  s.act.forEach(e=>{const k=catKey(e.cat),c=byCat[k]||(byCat[k]={t:0,d:0,m:0});c.t++;if(e.status==='selesai')c.d++;c.m+=dur(e)});
   const ids=catOrder(byCat).sort((a,b)=>byCat[b].t-byCat[a].t),mx=Math.max(1,...ids.map(i=>byCat[i].t));
-  const catHtml=ids.map(id=>`<div class="catrow" style="${catStyle(id)}"><span class="catdot">${esc(catLabel(id))}</span><div class="track"><div class="fill" style="width:${byCat[id].t/mx*100}%"><i style="width:${byCat[id].d/byCat[id].t*100}%"></i></div></div><span class="h num">${byCat[id].d}/${byCat[id].t}</span></div>`).join('');
+  const catTxt=id=>`${byCat[id].d}/${byCat[id].t}${byCat[id].m?' · '+T('{h} jam',{h:fmtH(byCat[id].m)}):''}`;
+  const catHtml=ids.map(id=>`<div class="catrow" style="${catStyle(id)}"><span class="catdot">${esc(catLabel(id))}</span><div class="track"><div class="fill" style="width:${byCat[id].t/mx*100}%"><i style="width:${byCat[id].d/byCat[id].t*100}%"></i></div></div><span class="h num">${catTxt(id)}</span></div>`).join('');
+  const totalMin=s.act.reduce((a,e)=>a+dur(e),0),noTime=s.act.filter(e=>!(e.start&&e.end)).length;
+  const hoursLine=T('Waktu terjadwal: {h} jam',{h:fmtH(totalMin)})+(noTime?' · '+T('{n} kegiatan tanpa jam mulai dan selesai tidak dihitung',{n:noTime}):'');
 
   // week: each day; month: events summed per weekday, which shows the rhythm of the whole month
   const cols=[...Array(7)].map(()=>({total:0,byC:{}})),perDay={};
@@ -499,17 +514,52 @@ function renderReport(){
     const d=addDays(p.a,i);
     return `<div class="wday"><span class="hrs num">${c.total||'–'}</span><span class="col">${catOrder(c.byC).map(id=>`<i style="${catStyle(id)};background:var(--cat);height:${c.byC[id]/wmax*100}%"></i>`).join('')}</span><span class="dn">${isW?fWd.format(d)+' '+d.getDate():fWd.format(new Date(2024,0,1+i))}</span></div>`;
   }).join('')}</div>`;
+
+  const facts=[];
   const dates=Object.keys(perDay),top=dates.reduce((a,d)=>!a||perDay[d].length>perDay[a].length?d:a,null),dayN=Math.round((p.b-p.a)/864e5)+1;
-  const facts=[top?T('Hari tersibuk: {d} ({k})',{d:fDayShort.format(parse(top)),k:T('{n} kegiatan',{n:perDay[top].length})}):'',T('Hari tanpa kegiatan: {a} dari {b}',{a:dayN-dates.length,b:dayN})].filter(Boolean).join(' · ');
+  if(top)facts.push(T('Hari tersibuk: {d} ({k})',{d:fDayShort.format(parse(top)),k:T('{n} kegiatan',{n:perDay[top].length})}));
+  facts.push(T('Hari tanpa kegiatan: {a} dari {b}',{a:dayN-dates.length,b:dayN}));
+  const slots={};
+  s.act.forEach(e=>{if(e.start){const m=mins(e.start),k=m<660?'pagi':m<900?'siang':m<1080?'sore':'malam';slots[k]=(slots[k]||0)+1}});
+  const topSlot=Object.keys(slots).sort((a,b)=>slots[b]-slots[a])[0];
+  if(topSlot)facts.push(T('Waktu terpadat: {s} ({k})',{s:T(topSlot),k:T('{n} kegiatan',{n:slots[topSlot]})}));
+  let clash=0;const timed={};
+  s.act.forEach(e=>{if(e.start&&e.end&&e.status!=='tunda')(timed[e.date]=timed[e.date]||[]).push(e)});
+  Object.values(timed).forEach(l=>{for(let i=0;i<l.length;i++)for(let j=i+1;j<l.length;j++)if(mins(l[i].start)<mins(l[j].end)&&mins(l[j].start)<mins(l[i].end))clash++});
+  facts.push(T('Jadwal bentrok: {n}',{n:clash}));
+  const bad={};
+  s.all.forEach(e=>{if(e.status==='tunda'||e.status==='batal'){const k=catKey(e.cat);bad[k]=(bad[k]||0)+1}});
+  const topBad=Object.keys(bad).sort((a,b)=>bad[b]-bad[a])[0];
+  if(topBad!==undefined)facts.push(T('Paling sering ditunda atau dibatalkan: {c} ({n}x)',{c:catLabel(topBad),n:bad[topBad]}));
 
-  const lateHtml=s.late.length
-    ?`<ul class="att">${s.late.slice(0,6).map(e=>`<li style="${catStyle(e.cat)}"><button class="ev" data-open="${esc(e.id)}" style="flex:1;min-width:0"><span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span><span class="sub">${fDayShort.format(parse(e.date))} · ${timeText(e)}</span></span></button></li>`).join('')}${s.late.length>6?`<li class="empty">${T('+{n} lainnya di tampilan Jadwal',{n:s.late.length-6})}</li>`:''}</ul>`
-    :`<div class="empty">${T('Semua kegiatan yang lewat sudah ditandai.')}</div>`;
+  // 4. what needs action: one-tap buttons right in the report
+  const rows=(list,acts,max)=>`<ul class="att">${list.slice(0,max).map(e=>`<li style="${catStyle(e.cat)}"><button class="ev" data-open="${esc(e.id)}" style="flex:1;min-width:0"><span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span><span class="sub">${fDayShort.format(parse(e.date))} · ${timeText(e)}</span></span></button><span class="acts">${acts.map(a=>`<button class="btn ${a[2]} small" data-status="${a[0]}" data-id="${esc(e.id)}">${T(a[1])}</button>`).join('')}</span></li>`).join('')}${list.length>max?`<li class="empty">${T('+{n} lainnya di tampilan Jadwal',{n:list.length-max})}</li>`:''}</ul>`;
+  const lateHtml=s.late.length?rows(s.late,[['selesai','Selesai','tonal'],['tunda','Tunda','text'],['batal','Batal','text']],8):`<div class="empty">${T('Semua kegiatan yang lewat sudah ditandai.')}</div>`;
+  const postHtml=s.postponed.length?`<h3>${T('Ditunda')} (${s.postponed.length})</h3><p class="hint">${T('Ketuk kegiatan untuk mengubah tanggalnya.')}</p>${rows(s.postponed,[['selesai','Selesai','tonal'],['batal','Batal','text']],6)}`:'';
 
-  $('repBody').innerHTML=tiles+`<p class="reppara">${cmp}</p>`
-    +`<h3>${T('Per kategori')}</h3>`+(ids.length?`<p class="hint">${T('Panjang bar = jumlah kegiatan; bagian pekat = yang selesai.')}</p><div class="cats">${catHtml}</div>`:`<div class="empty">${T('Belum ada kegiatan di periode ini.')}</div>`)
-    +`<h3>${isW?T('Kepadatan per hari'):T('Pola per hari dalam seminggu')}</h3>${weekHtml}<p class="reppara">${facts}</p>`
-    +`<h3>${T('Belum ditandai')} (${s.late.length})</h3>${lateHtml}`;
+  // 5. a glance ahead, only while looking at the running period
+  let nextHtml='';
+  if(repOff===0){
+    const np=repPeriod(1),nl=inRange(events(),ymd(np.a),ymd(np.b)).filter(active),byDn={};
+    nl.forEach(e=>{byDn[e.date]=(byDn[e.date]||0)+1});
+    const topN=Object.keys(byDn).sort((a,b)=>byDn[b]-byDn[a]||a.localeCompare(b))[0],ddl=nl.filter(e=>!e.start&&e.end).length;
+    const bits=[T('{n} kegiatan',{n:nl.length})];
+    if(topN)bits.push(T('terpadat {d}',{d:fDayShort.format(parse(topN))}));
+    if(ddl)bits.push(T('{n} tenggat',{n:ddl}));
+    nextHtml=`<h3>${T('Ke depan')}: ${T(isW?'Minggu depan':'Bulan depan')}</h3><p class="reppara">${nl.length?bits.join(' · '):T('Belum ada kegiatan terjadwal.')}</p>`;
+  }
+
+  repText=[`${T('Laporan')} ${T(isW?'Minggu':'Bulan')}: ${range}`,sentence,'',
+    segs.map(x=>T(x[1])+' '+x[0]).join(' · '),hoursLine,'',
+    ...ids.map(id=>`- ${catLabel(id)}: ${catTxt(id)}`),'',
+    ...facts.map(f=>`- ${f}`),
+    ...(s.late.length?['',`${T('Belum ditandai')} (${s.late.length}):`,...s.late.slice(0,10).map(e=>`- ${e.title} (${fDayShort.format(parse(e.date))})`)]:[]),
+    ...(s.postponed.length?['',`${T('Ditunda')} (${s.postponed.length}):`,...s.postponed.slice(0,10).map(e=>`- ${e.title} (${fDayShort.format(parse(e.date))})`)]:[])].join('\n');
+
+  $('repBody').innerHTML=`<p class="repsum">${esc(sentence)}</p>`+tiles+stack
+    +`<h3>${T('Per kategori')}</h3><p class="hint">${T('Panjang bar = jumlah kegiatan; bagian pekat = yang selesai.')}</p><div class="cats">${catHtml}</div><p class="reppara">${esc(hoursLine)}</p>`
+    +`<h3>${isW?T('Kepadatan per hari'):T('Pola per hari dalam seminggu')}</h3>${weekHtml}<ul class="repfacts">${facts.map(f=>`<li>${esc(f)}</li>`).join('')}</ul>`
+    +`<h3>${T('Belum ditandai')} (${s.late.length})</h3>${lateHtml}`+postHtml+nextHtml;
 }
 function openRep(){repOff=0;renderReport();$('repOv').hidden=false}
 function closeRep(){$('repOv').hidden=true}
@@ -1523,6 +1573,19 @@ $('wNow').onclick=()=>{weekOff=0;renderDashboard()};
 $('rPrev').onclick=()=>{repOff--;renderReport()};
 $('rNext').onclick=()=>{repOff++;renderReport()};
 $('rNow').onclick=()=>{repOff=0;renderReport()};
+$('rCopy').onclick=async()=>{
+  if(!repText)return toast(T('Belum ada kegiatan di periode ini.'));
+  try{await navigator.clipboard.writeText(repText);toast(T('Laporan disalin'))}
+  catch(err){toast(T('Browser ini tidak bisa menyalin teks.'))}
+};
+// the numbers are computed here; the assistant only interprets them
+$('rAI').onclick=()=>{
+  if(!repText)return toast(T('Belum ada kegiatan di periode ini.'));
+  if(aiBusy)return toast(T('Asisten masih menjawab. Coba lagi sebentar.'));
+  const unit=repMode==='week'?'minggu':'bulan';
+  const q=`Berikut laporan ${unit} saya. Angkanya sudah dihitung, jangan dihitung ulang:\n\n${repText}\n\nTafsirkan dalam 3–4 kalimat: apa yang berjalan baik, apa masalah utamanya, lalu beri 2–3 saran konkret untuk ${unit} depan. Jangan mengusulkan perubahan jadwal.`;
+  closeRep();setAI(true);askAI(q,{tools:false});
+};
 $('repSeg').addEventListener('click',e=>{const b=e.target.closest('[data-rmode]');if(b&&b.dataset.rmode!==repMode){repMode=b.dataset.rmode;repOff=0;renderReport()}});
 ['fq','fperiod','fcat','fstatus'].forEach(id=>$(id).addEventListener('input',renderList));mqMobile.addEventListener('change',()=>{closeDrawer();render()});
 window.addEventListener('focus',()=>{if(backend==='api'&&!anyOverlay())loadRemote().catch(()=>{})});
