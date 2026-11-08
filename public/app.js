@@ -475,7 +475,7 @@ function renderReport(){
   $('repRange').textContent=range;
   $('rNow').disabled=repOff===0;
   document.querySelectorAll('#repSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.rmode===repMode));
-  if(!s.all.length){repText='';$('repBody').innerHTML=`<div class="empty">${T('Belum ada kegiatan di periode ini.')}</div>`;return}
+  if(!s.all.length){repText='';repKey='';$('repBody').innerHTML=`<div class="empty">${T('Belum ada kegiatan di periode ini.')}</div>`;return}
 
   // 1. one-sentence summary
   const w=T(isW?'minggu lalu':'bulan lalu'),parts=[];
@@ -556,12 +556,57 @@ function renderReport(){
     ...(s.late.length?['',`${T('Belum ditandai')} (${s.late.length}):`,...s.late.slice(0,10).map(e=>`- ${e.title} (${fDayShort.format(parse(e.date))})`)]:[]),
     ...(s.postponed.length?['',`${T('Ditunda')} (${s.postponed.length}):`,...s.postponed.slice(0,10).map(e=>`- ${e.title} (${fDayShort.format(parse(e.date))})`)]:[])].join('\n');
 
-  $('repBody').innerHTML=`<p class="repsum">${esc(sentence)}</p>`+tiles+stack
+  let hsh=0;for(let i=0;i<repText.length;i++)hsh=(hsh*31+repText.charCodeAt(i))|0;
+  repKey=`${repMode}|${ymd(p.a)}|${I18N.lang}|${hsh}`; // the explanation is reused until the numbers (or the language) change
+  $('repBody').innerHTML=`<p class="repsum">${esc(sentence)}</p><div id="repAI"></div>`+tiles+stack
     +`<h3>${T('Per kategori')}</h3><p class="hint">${T('Panjang bar = jumlah kegiatan; bagian pekat = yang selesai.')}</p><div class="cats">${catHtml}</div><p class="reppara">${esc(hoursLine)}</p>`
     +`<h3>${isW?T('Kepadatan per hari'):T('Pola per hari dalam seminggu')}</h3>${weekHtml}<ul class="repfacts">${facts.map(f=>`<li>${esc(f)}</li>`).join('')}</ul>`
     +`<h3>${T('Belum ditandai')} (${s.late.length})</h3>${lateHtml}`+postHtml+nextHtml;
+  renderRepAI();
 }
-function openRep(){repOff=0;renderReport();$('repOv').hidden=false}
+
+/* ---------- report: AI explanation (on demand, kept per period) ---------- */
+let repKey='';
+const repAICache=new Map(), repBusy=new Set();let repAIErr='';
+const REP_VERD={good:['Baik','check_circle','var(--ok)'],fair:['Cukup','info','var(--warn)'],attention:['Perlu perhatian','warning','var(--bad)']};
+const hl=s=>String(s).split(/(\d+(?:[.,]\d+)?%?)/).map((x,i)=>i%2?`<b>${esc(x)}</b>`:esc(x)).join('');
+function insightText(i){
+  return [i.headline,...(i.good.length?['',T('Berjalan baik')+':',...i.good.map(x=>'- '+x)]:[]),...(i.watch.length?['',T('Perlu diperhatikan')+':',...i.watch.map(x=>'- '+x)]:[]),...(i.tips.length?['',T('Saran')+':',...i.tips.map((x,n)=>`${n+1}. ${x}`)]:[]),...(i.focus?['',i.focus]:[])].join('\n');
+}
+function renderRepAI(){
+  const box=$('repAI');if(!box)return;
+  const head=right=>`<div class="rai-head"><span class="ms">auto_awesome</span><b>${T('Penjelasan AI')}</b><span class="rai-sp"></span>${right||''}</div>`;
+  if(repBusy.has(repKey)){box.innerHTML=`<div class="rai" aria-busy="true">${head()}<div class="rai-sk"><i></i><i></i><i></i></div><p class="rai-note">${T('AI sedang menyusun penjelasan…')}</p></div>`;return}
+  const hit=repAICache.get(repKey);
+  if(hit){
+    const i=hit.insight,v=REP_VERD[i.verdict]||REP_VERD.fair;
+    const list=(cls,icon,title,items)=>items.length?`<div class="rai-box" style="--c:${cls}"><h4><span class="ms">${icon}</span>${T(title)}</h4><ul>${items.map(x=>`<li>${hl(x)}</li>`).join('')}</ul></div>`:'';
+    box.innerHTML=`<div class="rai">${head(`<span class="rai-verd" style="--c:${v[2]}"><span class="ms">${v[1]}</span>${T(v[0])}</span>`)}
+      <p class="rai-line">${hl(i.headline)}</p>
+      ${i.good.length||i.watch.length?`<div class="rai-cols">${list('var(--ok)','check_circle','Berjalan baik',i.good)}${list('var(--warn)','warning','Perlu diperhatikan',i.watch)}</div>`:''}
+      ${i.tips.length?`<div class="rai-tips"><h4><span class="ms">lightbulb</span>${T('Saran')}</h4><ol>${i.tips.map(x=>`<li>${hl(x)}</li>`).join('')}</ol></div>`:''}
+      ${i.focus?`<div class="rai-focus"><span class="ms">flag</span><span>${hl(i.focus)}</span></div>`:''}
+      <div class="rai-foot"><span>${esc(hit.provider)}${hit.model?' · '+esc(hit.model):''}</span><button class="btn text small" data-rai>${T('Buat ulang')}</button></div></div>`;
+    return;
+  }
+  const provs=['groq','gemini'].map(id=>{
+    const p=aiProviders?.find(x=>x.id===id);
+    return `<button type="button" data-rprov="${id}" aria-pressed="${id===aiProv}"${aiProviders&&!p?.available?' disabled':''} title="${esc(p?(p.available?p.model:T('API key {n} belum diatur di server',{n:p.name})):'')}">${id==='groq'?'Groq':'Gemini'}</button>`;
+  }).join('');
+  box.innerHTML=`<div class="rai">${head()}<p class="rai-note">${T('Ringkasan, hal yang berjalan baik, yang perlu diperhatikan, dan saran. Yang dikirim ke AI hanya angka laporan ini dan judul kegiatan yang belum ditandai atau ditunda.')}</p>
+    <div class="rai-act"><div class="seg" role="radiogroup" aria-label="${T('Model AI')}">${provs}</div><button class="btn primary small" data-rai>${T('Buat penjelasan')}</button></div>
+    ${repAIErr?`<p class="rai-err">${esc(repAIErr)}</p>`:''}</div>`;
+}
+async function runRepAI(){
+  const key=repKey;if(!repText||repBusy.has(key))return;
+  repBusy.add(key);repAIErr='';renderRepAI();
+  try{
+    const d=await api('report',{method:'POST',body:{text:repText,kind:repMode,current:repOff===0,lang:I18N.lang,provider:aiProv||undefined}});
+    repAICache.set(key,d);
+  }catch(e){repAIErr=e.message||T('Terjadi gangguan. Coba kirim lagi.')}
+  finally{repBusy.delete(key);if(key===repKey)renderRepAI()}
+}
+function openRep(){repOff=0;repAIErr='';renderReport();$('repOv').hidden=false;loadProviders().then(renderRepAI)}
 function closeRep(){$('repOv').hidden=true}
 
 function render(){
@@ -1575,17 +1620,15 @@ $('rNext').onclick=()=>{repOff++;renderReport()};
 $('rNow').onclick=()=>{repOff=0;renderReport()};
 $('rCopy').onclick=async()=>{
   if(!repText)return toast(T('Belum ada kegiatan di periode ini.'));
-  try{await navigator.clipboard.writeText(repText);toast(T('Laporan disalin'))}
+  const hit=repAICache.get(repKey);
+  try{await navigator.clipboard.writeText(repText+(hit?'\n\n'+insightText(hit.insight):''));toast(T('Laporan disalin'))}
   catch(err){toast(T('Browser ini tidak bisa menyalin teks.'))}
 };
-// the numbers are computed here; the assistant only interprets them
-$('rAI').onclick=()=>{
-  if(!repText)return toast(T('Belum ada kegiatan di periode ini.'));
-  if(aiBusy)return toast(T('Asisten masih menjawab. Coba lagi sebentar.'));
-  const unit=repMode==='week'?'minggu':'bulan';
-  const q=`Berikut laporan ${unit} saya. Angkanya sudah dihitung, jangan dihitung ulang:\n\n${repText}\n\nTafsirkan dalam 3–4 kalimat: apa yang berjalan baik, apa masalah utamanya, lalu beri 2–3 saran konkret untuk ${unit} depan. Jangan mengusulkan perubahan jadwal.`;
-  closeRep();setAI(true);askAI(q,{tools:false});
-};
+$('repBody').addEventListener('click',e=>{
+  const pv=e.target.closest('[data-rprov]');
+  if(pv){if(!pv.disabled){aiProv=pv.dataset.rprov;store.set('agenda-ai-provider',aiProv);renderProv();renderRepAI()}return}
+  if(e.target.closest('[data-rai]'))runRepAI();
+});
 $('repSeg').addEventListener('click',e=>{const b=e.target.closest('[data-rmode]');if(b&&b.dataset.rmode!==repMode){repMode=b.dataset.rmode;repOff=0;renderReport()}});
 ['fq','fperiod','fcat','fstatus'].forEach(id=>$(id).addEventListener('input',renderList));mqMobile.addEventListener('change',()=>{closeDrawer();render()});
 window.addEventListener('focus',()=>{if(backend==='api'&&!anyOverlay())loadRemote().catch(()=>{})});
