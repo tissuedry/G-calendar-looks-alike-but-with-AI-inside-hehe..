@@ -538,6 +538,23 @@ button{touch-action:manipulation}
 .hello h2{font-size:1.75rem;font-weight:400;margin:0;letter-spacing:-.01em}
 .hello p{margin:4px 0 0;color:var(--muted);font-size:.95rem;max-width:64ch}
 .hello p b{color:var(--ink);font-weight:500}
+.repbar{margin:-6px 0 16px}
+.repbar .btn{display:inline-flex;align-items:center;gap:6px}
+.modal.rep{width:min(720px,100%)}
+.repnav{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:14px}
+.repnav .seg{margin-right:8px}
+.repnav .range{font-weight:500;margin-right:auto;font-size:.92rem}
+.rep h3{font-size:.95rem;font-weight:500;margin:20px 0 8px}
+.rep .hint{margin:-4px 0 10px;color:var(--muted);font-size:.8rem}
+.rep .repstats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.rep .stat .value{font-size:1.6rem}
+.rep .reppara{margin:12px 0 0;color:var(--muted);font-size:.88rem}
+.rep .cats{display:grid;gap:8px}
+.rep .catrow .fill{background:color-mix(in srgb,var(--cat) 30%,transparent);overflow:hidden}
+.rep .catrow .fill i{display:block;height:100%;background:var(--cat)}
+.rep .wday{--bar-h:90px}
+.rep .att li{flex-wrap:nowrap}
+@media (max-width:520px){.rep .repstats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .main.loading::before{content:"";flex:none;position:sticky;top:0;z-index:6;height:3px;background:linear-gradient(90deg,transparent,var(--accent),transparent) no-repeat;background-size:35% 100%;background-position:-40% 0}
 .nowline::after{content:"";position:absolute;left:-6px;top:-5px;width:12px;height:12px;border-radius:50%;background:var(--now);opacity:0}
 .flag.now{display:inline-flex;align-items:center;gap:5px}

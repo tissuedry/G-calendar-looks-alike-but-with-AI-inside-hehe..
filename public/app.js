@@ -448,6 +448,72 @@ function renderDashboard(){
   $('weekLegend').innerHTML=usedIds.map(id=>`<span class="catdot" style="${catStyle(id)}">${esc(catLabel(id))}</span>`).join('');
 }
 
+/* ---------- report (per week / per month) ---------- */
+let repMode='week', repOff=0;
+function repPeriod(off){
+  if(repMode==='week'){const a=addDays(weekStart(now),off*7);return {a,b:addDays(a,6)}}
+  const a=new Date(now.getFullYear(),now.getMonth()+off,1);
+  return {a,b:new Date(a.getFullYear(),a.getMonth()+1,0)};
+}
+function repStats(p){
+  const today=ymd(now),nowM=now.getHours()*60+now.getMinutes();
+  const isPast=e=>e.date<today||(e.date===today&&eM(e)<=nowM);
+  const all=inRange(events(),ymd(p.a),ymd(p.b)),act=all.filter(active);
+  // same rule as the "Selesai bulan ini" card: due = marked done, or already over (recurring plans that were never touched don't count)
+  const due=act.filter(e=>e.status==='selesai'||(isPast(e)&&!(e.seriesId&&e.status==='rencana')));
+  const done=due.filter(e=>e.status==='selesai');
+  return {all,act,due,done,late:due.filter(e=>e.status!=='selesai').sort(sortEv),pct:due.length?Math.round(done.length/due.length*100):0};
+}
+function renderReport(){
+  const p=repPeriod(repOff),s=repStats(p),pv=repStats(repPeriod(repOff-1)),isW=repMode==='week';
+  $('repRange').textContent=isW?rangeLabel(p.a,p.b):fMonthLong.format(p.a)+' '+p.a.getFullYear();
+  $('rNow').disabled=repOff===0;
+  document.querySelectorAll('#repSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.rmode===repMode));
+  if(!s.all.length){$('repBody').innerHTML=`<div class="empty">${T('Belum ada kegiatan di periode ini.')}</div>`;return}
+  const sgn=n=>n>0?'+'+n:String(n);
+
+  const tiles=`<div class="repstats">
+    <div class="stat"><div class="label">${T('Total kegiatan')}</div><div class="value num">${s.act.length}</div><div class="sub">${s.all.length>s.act.length?T('{n} dibatalkan',{n:s.all.length-s.act.length}):''}</div></div>
+    <div class="stat"><div class="label">${T('Selesai')}</div><div class="value num">${s.done.length}/${s.due.length}</div><div class="meter" aria-hidden="true"><i style="width:${s.pct}%"></i></div><div class="sub">${s.due.length?T('{p}% dari yang sudah jatuh tempo',{p:s.pct}):T('Belum ada yang jatuh tempo')}</div></div>
+    <div class="stat"><div class="label">${T('Belum ditandai')}</div><div class="value num">${s.late.length}</div><div class="sub">${s.late.length?`<b class="late">${T('sudah lewat, belum selesai')}</b>`:T('semua sudah ditandai')}</div></div>
+    <div class="stat"><div class="label">${T('Akan datang')}</div><div class="value num">${s.act.length-s.due.length}</div><div class="sub">${T('belum jatuh tempo')}</div></div></div>`;
+
+  const w=T(isW?'minggu lalu':'bulan lalu');
+  const cmp=pv.act.length
+    ?T('Dibanding {w}: jumlah kegiatan {d}, persen selesai {e}.',{w,d:sgn(s.act.length-pv.act.length),e:s.due.length&&pv.due.length?sgn(s.pct-pv.pct)+' '+T('poin'):'–'})
+    :T('Belum ada kegiatan di {w} untuk dibandingkan.',{w});
+
+  const byCat={};
+  s.act.forEach(e=>{const k=catKey(e.cat),c=byCat[k]||(byCat[k]={t:0,d:0});c.t++;if(e.status==='selesai')c.d++});
+  const ids=catOrder(byCat).sort((a,b)=>byCat[b].t-byCat[a].t),mx=Math.max(1,...ids.map(i=>byCat[i].t));
+  const catHtml=ids.map(id=>`<div class="catrow" style="${catStyle(id)}"><span class="catdot">${esc(catLabel(id))}</span><div class="track"><div class="fill" style="width:${byCat[id].t/mx*100}%"><i style="width:${byCat[id].d/byCat[id].t*100}%"></i></div></div><span class="h num">${byCat[id].d}/${byCat[id].t}</span></div>`).join('');
+
+  // week: each day; month: events summed per weekday, which shows the rhythm of the whole month
+  const cols=[...Array(7)].map(()=>({total:0,byC:{}})),perDay={};
+  s.act.forEach(e=>{
+    const c=cols[(parse(e.date).getDay()+6)%7],k=catKey(e.cat);
+    c.total++;c.byC[k]=(c.byC[k]||0)+1;(perDay[e.date]=perDay[e.date]||[]).push(e);
+  });
+  const wmax=Math.max(4,...cols.map(c=>c.total));
+  const weekHtml=`<div class="week">${cols.map((c,i)=>{
+    const d=addDays(p.a,i);
+    return `<div class="wday"><span class="hrs num">${c.total||'–'}</span><span class="col">${catOrder(c.byC).map(id=>`<i style="${catStyle(id)};background:var(--cat);height:${c.byC[id]/wmax*100}%"></i>`).join('')}</span><span class="dn">${isW?fWd.format(d)+' '+d.getDate():fWd.format(new Date(2024,0,1+i))}</span></div>`;
+  }).join('')}</div>`;
+  const dates=Object.keys(perDay),top=dates.reduce((a,d)=>!a||perDay[d].length>perDay[a].length?d:a,null),dayN=Math.round((p.b-p.a)/864e5)+1;
+  const facts=[top?T('Hari tersibuk: {d} ({k})',{d:fDayShort.format(parse(top)),k:T('{n} kegiatan',{n:perDay[top].length})}):'',T('Hari tanpa kegiatan: {a} dari {b}',{a:dayN-dates.length,b:dayN})].filter(Boolean).join(' · ');
+
+  const lateHtml=s.late.length
+    ?`<ul class="att">${s.late.slice(0,6).map(e=>`<li style="${catStyle(e.cat)}"><button class="ev" data-open="${esc(e.id)}" style="flex:1;min-width:0"><span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span><span class="sub">${fDayShort.format(parse(e.date))} · ${timeText(e)}</span></span></button></li>`).join('')}${s.late.length>6?`<li class="empty">${T('+{n} lainnya di tampilan Jadwal',{n:s.late.length-6})}</li>`:''}</ul>`
+    :`<div class="empty">${T('Semua kegiatan yang lewat sudah ditandai.')}</div>`;
+
+  $('repBody').innerHTML=tiles+`<p class="reppara">${cmp}</p>`
+    +`<h3>${T('Per kategori')}</h3>`+(ids.length?`<p class="hint">${T('Panjang bar = jumlah kegiatan; bagian pekat = yang selesai.')}</p><div class="cats">${catHtml}</div>`:`<div class="empty">${T('Belum ada kegiatan di periode ini.')}</div>`)
+    +`<h3>${isW?T('Kepadatan per hari'):T('Pola per hari dalam seminggu')}</h3>${weekHtml}<p class="reppara">${facts}</p>`
+    +`<h3>${T('Belum ditandai')} (${s.late.length})</h3>${lateHtml}`;
+}
+function openRep(){repOff=0;renderReport();$('repOv').hidden=false}
+function closeRep(){$('repOv').hidden=true}
+
 function render(){
   now=new Date();
   $('main').classList.toggle('loading',!loaded&&!loadErr);
@@ -461,6 +527,7 @@ function render(){
   }
   if(openDayStr&&!$('dayOv').hidden)openDay(openDayStr);
   if(detailId&&!$('detOv').hidden)openDetail(detailId);
+  if(!$('repOv').hidden)renderReport();
   if(view==='day'||view==='x3'||view==='week')renderGrid();
   else if(view==='month')renderMonth();
   else if(view==='schedule')renderList();
@@ -1401,7 +1468,7 @@ $('dAdd').onclick=()=>{const d=openDayStr;returnDay=d;$('dayOv').hidden=true;ope
 $('dOpen').onclick=()=>{const d=openDayStr;closeDay();openDayView(d)};
 document.body.addEventListener('click',e=>{
   const cl=e.target.closest('[data-close]');
-  if(cl){({form:closeForm,day:closeDay,cats:closeCats,det:closeDetail})[cl.dataset.close]();return}
+  if(cl){({form:closeForm,day:closeDay,cats:closeCats,det:closeDetail,rep:closeRep})[cl.dataset.close]();return}
   const vg=e.target.closest('[data-view-go]');
   if(vg){
     const v=vg.dataset.viewGo;
@@ -1422,19 +1489,20 @@ document.body.addEventListener('click',e=>{
   const day=e.target.closest('[data-day]');
   if(day){openDay(day.dataset.day);return}
   if(e.target.closest('[data-act="add"]'))return openForm(null,(view==='day'||view==='x3')?ymd(cursor):undefined);
+  if(e.target.closest('[data-act="report"]'))return openRep();
   if(e.target.closest('[data-act="cats"]'))return openCats();
   if(e.target.closest('[data-act="retry"]'))return reload();
   const rg=e.target.closest('[data-range]');
   if(rg){catRange=rg.dataset.range;renderDashboard()}
 });
 $('monthGrid').addEventListener('keydown',e=>{const c=e.target.closest('.mcell');if(c&&e.target===c&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openDay(c.dataset.day)}});
-const OVERLAYS={formOv:closeForm,dayOv:closeDay,catOv:closeCats,detOv:closeDetail};
+const OVERLAYS={formOv:closeForm,dayOv:closeDay,catOv:closeCats,detOv:closeDetail,repOv:closeRep};
 Object.keys(OVERLAYS).forEach(id=>$(id).addEventListener('click',e=>{if(e.target===$(id))OVERLAYS[id]()}));
 const anyOverlay=()=>Object.keys(OVERLAYS).some(id=>!$(id).hidden)||!$('login').hidden;
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
     if(!$('viewMenu').hidden){toggleViewMenu(false);$('viewBtn').focus();return}
-    if(!$('catOv').hidden)closeCats();else if(!$('formOv').hidden)closeForm();else if(!$('detOv').hidden)closeDetail();else if(!$('dayOv').hidden)closeDay();
+    if(!$('catOv').hidden)closeCats();else if(!$('formOv').hidden)closeForm();else if(!$('detOv').hidden)closeDetail();else if(!$('dayOv').hidden)closeDay();else if(!$('repOv').hidden)closeRep();
     else if($('shell').classList.contains('drawer'))closeDrawer();
     else if(!$('aiPanel').hidden&&mqMobile.matches)setAI(false);
     return;
@@ -1452,6 +1520,10 @@ document.addEventListener('keydown',e=>{
 $('wPrev').onclick=()=>{weekOff--;renderDashboard()};
 $('wNext').onclick=()=>{weekOff++;renderDashboard()};
 $('wNow').onclick=()=>{weekOff=0;renderDashboard()};
+$('rPrev').onclick=()=>{repOff--;renderReport()};
+$('rNext').onclick=()=>{repOff++;renderReport()};
+$('rNow').onclick=()=>{repOff=0;renderReport()};
+$('repSeg').addEventListener('click',e=>{const b=e.target.closest('[data-rmode]');if(b&&b.dataset.rmode!==repMode){repMode=b.dataset.rmode;repOff=0;renderReport()}});
 ['fq','fperiod','fcat','fstatus'].forEach(id=>$(id).addEventListener('input',renderList));mqMobile.addEventListener('change',()=>{closeDrawer();render()});
 window.addEventListener('focus',()=>{if(backend==='api'&&!anyOverlay())loadRemote().catch(()=>{})});
 
@@ -1472,7 +1544,7 @@ window.addEventListener('focus',()=>{if(backend==='api'&&!anyOverlay())loadRemot
 
 /* ---------- language ---------- */
 // containers the app fills itself (already in the right language, and they hold user data): the static-DOM translator skips them
-I18N.skip='#tg,#monthGrid,#listOut,#hello,#stats,#todayList,#catBars,#attList,#upList,#weekLoad,#weekLegend,#weekRange,#todayMeta,#weekMeta,#dList,#dSum,#dTitle,#detBody,#detDel,#cmList,#aiLog,#aiChipRow,#aiProv,#aiModel,#mini,#catVis,#banner,#f-cats,#delZone,#viewMenu,#viewLabel,#periodTitle,#repPreview,#f-err,#loginErr,#toast,#shortcuts,#mTitle';
+I18N.skip='#tg,#monthGrid,#listOut,#hello,#stats,#todayList,#catBars,#attList,#upList,#weekLoad,#weekLegend,#weekRange,#repRange,#repBody,#todayMeta,#weekMeta,#dList,#dSum,#dTitle,#detBody,#detDel,#cmList,#aiLog,#aiChipRow,#aiProv,#aiModel,#mini,#catVis,#banner,#f-cats,#delZone,#viewMenu,#viewLabel,#periodTitle,#repPreview,#f-err,#loginErr,#toast,#shortcuts,#mTitle';
 function renderShortcuts(){
   const k=(c,w)=>`<kbd>${c}</kbd> ${T(w)}`;
   $('shortcuts').innerHTML=`${T('Pintasan:')} ${[k('D','hari'),k('X','3 hari'),k('W','minggu'),k('M','bulan'),k('A','jadwal'),k('R','dashboard'),k('T','hari ini'),k('C','buat')].join(' · ')}`;
