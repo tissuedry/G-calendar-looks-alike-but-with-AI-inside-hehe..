@@ -538,6 +538,7 @@ button{touch-action:manipulation}
 .hello h2{font-size:1.75rem;font-weight:400;margin:0;letter-spacing:-.01em}
 .hello p{margin:4px 0 0;color:var(--muted);font-size:.95rem;max-width:64ch}
 .hello p b{color:var(--ink);font-weight:500}
+.dtag{margin-left:6px;font-size:.78em;font-weight:500;opacity:.7;white-space:nowrap}
 .repbar{margin:-6px 0 16px}
 .repbar .btn{display:inline-flex;align-items:center;gap:6px}
 .modal.rep{width:min(720px,100%)}

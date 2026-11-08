@@ -217,6 +217,11 @@
         <label class="f">Mulai<input id="f-start" type="time"></label>
         <label class="f"><span data-i18n="Jam selesai">Selesai</span><input id="f-end" type="time"></label>
       </div>
+      <div class="fr2" id="spanRow">
+        <label class="f">Sampai tanggal (kegiatan beberapa hari)<input id="f-enddate" type="date"></label>
+        <div class="f" style="align-content:end"><span class="reppreview" id="spanPreview"></span></div>
+      </div>
+      <p class="time-hint" id="spanHint" hidden>Jam mulai berlaku di hari pertama dan jam selesai di hari terakhir. Hari-hari di antaranya tanpa jam.</p>
       <p class="time-hint">Jam boleh dikosongkan. Isi hanya jam mulai untuk kegiatan di jam itu saja, hanya jam selesai untuk tenggat, atau kosongkan keduanya bila jamnya belum pasti. <button type="button" class="btn text small" id="f-notime">Kosongkan jam</button></p>
       <div class="f"><span class="flabel">Kategori <button type="button" class="btn text small" data-act="cats">Kelola kategori</button></span><div class="catpick" id="f-cats"></div></div>
       <div class="fr2">

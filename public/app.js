@@ -88,7 +88,20 @@ function expandSeries(s){
   }
   return out;
 }
-function events(){return real.some(e=>e.repeat)?real.flatMap(e=>e.repeat?expandSeries(e):[e]):real}
+/* An event over several days is stored ONCE (date..endDate). events() splits it into one block per day: id "<id>" for the
+   first day and "<id>~<date>" for the rest (spanId = the stored id, cont = not the first day). The first day keeps the start
+   time, the last day the end time, the days in between have no time. Counting code uses uniq() so it counts as one event. */
+const isSpan=e=>!!e.endDate&&e.endDate>e.date;
+function expandSpan(s){
+  const a=parse(s.date),n=Math.round((parse(s.endDate)-a)/864e5)+1,out=[];
+  for(let i=0;i<n;i++){const k=ymd(addDays(a,i));out.push({...s,id:i?s.id+'~'+k:s.id,date:k,spanId:s.id,cont:i>0,dayNo:i+1,dayN:n,endT:s.end,start:i?'':s.start,end:i===n-1?s.end:''})}
+  return out;
+}
+function events(){return real.some(e=>e.repeat||e.endDate)?real.flatMap(e=>e.repeat?expandSeries(e):isSpan(e)?expandSpan(e):[e]):real}
+const uniq=l=>{const seen=new Set();return l.filter(e=>{const k=e.spanId||e.id;return seen.has(k)?false:(seen.add(k),true)})};
+const dayTag=e=>e.dayN?`<span class="dtag">${e.dayNo}/${e.dayN}</span>`:'';
+// a multi-day event is over only after its LAST day (and that day's end time)
+const overAt=(e,today,nowM)=>{const d=e.endDate||e.date;return d<today||(d===today&&(e.endDate?(e.endT?mins(e.endT):1440):eM(e))<=nowM)};
 const rawEv=id=>real.find(x=>x.id===id);
 const ruleText=(r,date)=>{
   const d=parse(date);
@@ -174,7 +187,7 @@ async function saveCats(next){
 async function setStatus(id,status){
   const e=events().find(x=>x.id===id);if(!e||e.status===status)return;
   // optimistic: show the new status at once, then save; roll back if the save fails
-  const i=real.findIndex(x=>x.id===(e.seriesId||id));if(i<0)return;
+  const i=real.findIndex(x=>x.id===(e.seriesId||e.spanId||id));if(i<0)return;
   const prev=real[i];let next;
   if(e.seriesId){ // one occurrence of a series: remember the status for that date only
     const st={...(prev.repeat.st||{})};
@@ -189,7 +202,7 @@ async function setStatus(id,status){
 /* ---------- shared bits ---------- */
 function evButton(e,extra=''){
   return `<button class="ev ${e.status==='batal'?'is-batal':''}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}">
-    <span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span>
+    <span class="bar"></span><span class="body"><span class="title">${esc(e.title)}${dayTag(e)}</span>
     <span class="sub"><span class="catdot">${esc(catLabel(e.cat))}</span>${e.status!=='rencana'?`<span class="pill st-${e.status}">${STATUS[e.status]}</span>`:''}${extra}</span></span></button>`;
 }
 function weekStart(d){const x=midnight(d);return addDays(x,-((x.getDay()+6)%7))}
@@ -275,13 +288,13 @@ function renderGrid(){
   const gut=`<div class="tg-gut">${[...Array(23)].map((_,i)=>`<span style="top:${(i+1)*H}px">${pad(i+1)}:00</span>`).join('')}</div>`;
   const loose=days.map(d=>(byDay[ymd(d)]||[]).filter(e=>!e.start&&!e.end));
   const hasLoose=loose.some(l=>l.length);
-  const allrow=hasLoose?`<div class="tg-allrow"><div class="gutter">${T('Tanpa jam')}</div>${loose.map(l=>`<div class="tg-allcell">${l.map(e=>`<button class="tallev ${e.status} ${lightCls(e.cat)}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}" title="${esc(e.title)}">${statusIcon(e)}${esc(e.title)}</button>`).join('')}</div>`).join('')}</div>`:'';
+  const allrow=hasLoose?`<div class="tg-allrow"><div class="gutter">${T('Tanpa jam')}</div>${loose.map(l=>`<div class="tg-allcell">${l.map(e=>`<button class="tallev ${e.status} ${lightCls(e.cat)}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}" title="${esc(e.title)}">${statusIcon(e)}${esc(e.title)}${dayTag(e)}</button>`).join('')}</div>`).join('')}</div>`:'';
   const cols=days.map((d,ci)=>{
     const s=ymd(d),wk=d.getDay()===0||d.getDay()===6;
     const blocks=layoutDay((byDay[s]||[]).filter(e=>e.start||e.end)).map(({e,s:st,en,col,cols})=>{
       const h=Math.max(18,(en-st)/60*H-2),cls=h<36?'short':h>90?'tall':'';
       return `<button class="tev ${e.status} ${cls} ${e.start?'':'deadline'} ${lightCls(e.cat)}" data-open="${esc(e.id)}" style="${catStyle(e.cat)};top:${st/60*H}px;height:${h}px;left:calc(${col/cols*100}% + 1px);width:calc(${100/cols}% - 4px)" title="${esc(e.title)} · ${timeText(e)}">
-        <span class="tt">${statusIcon(e)}${esc(e.title)}</span><span class="tm">${cls==='short'?(e.start||e.end):timeText(e)}</span></button>`;
+        <span class="tt">${statusIcon(e)}${esc(e.title)}${dayTag(e)}</span><span class="tm">${cls==='short'?(e.start||e.end):timeText(e)}</span></button>`;
     }).join('');
     return `<div class="tg-col ${s===today?'today':''} ${wk?'weekend':''}" data-slot="${s}" style="--ci:${ci}">${blocks}${s===today?`<div class="nowline" style="top:${nowM/60*H}px"></div>`:''}</div>`;
   }).join('');
@@ -306,7 +319,7 @@ function renderMonth(){
     const s=ymd(d),list=(byDay[s]||[]).sort(sortEv);
     html+=`<div class="mcell ${d.getMonth()!==m0.getMonth()?'out':''} ${s===today?'today':''}" data-day="${s}" role="button" tabindex="0" aria-label="${fDay.format(d)}, ${T('{n} kegiatan',{n:list.length})}">
       <button class="mdn" data-goday="${s}">${d.getDate()===1?fDM.format(d):d.getDate()}</button>
-      ${list.slice(0,3).map(e=>`<button class="mchip ${e.status} ${dur(e)>=360?'long '+lightCls(e.cat):''}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}"><i></i>${e.start||e.end?`<span class="mt">${e.start||e.end}</span>`:''}<span class="mtt">${esc(e.title)}</span></button>`).join('')}
+      ${list.slice(0,3).map(e=>`<button class="mchip ${e.status} ${dur(e)>=360?'long '+lightCls(e.cat):''}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}"><i></i>${e.start||e.end?`<span class="mt">${e.start||e.end}</span>`:''}<span class="mtt">${esc(e.title)}${dayTag(e)}</span></button>`).join('')}
       ${list.length>3?`<button class="mmore" data-day="${s}">${T('{n} lainnya',{n:list.length-3})}</button>`:''}
       <span class="dots">${list.slice(0,6).map(e=>`<i style="${catStyle(e.cat)}"></i>`).join('')}</span></div>`;
   }
@@ -354,22 +367,22 @@ function renderList(){
   $('listOut').innerHTML=`<p class="smeta">${T('{n} kegiatan · {h} jam',{n:ev.length,h:fmtH(ev.filter(active).reduce((a,e)=>a+dur(e),0))})}</p>`+groups.map(g=>{
     const d=parse(g.date);
     return `<div class="sday ${g.date===today?'today':''}"><button class="sdate" data-goday="${g.date}" aria-label="${fDay.format(d)}"><span class="sdn">${d.getDate()}</span><span class="swd">${fMonShort.format(d)} ${d.getFullYear()!==now.getFullYear()?d.getFullYear():''}<br>${fWd.format(d)}</span></button>
-      <div class="sitems">${g.items.map(e=>`<button class="srow ${e.status}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}"><span class="dot"></span><span class="stime num">${timeText(e)}</span><span class="stitle">${esc(e.title)}<span class="scat">${esc(catLabel(e.cat))}</span></span><span class="pill st-${e.status}">${STATUS[e.status]}</span></button>`).join('')}</div></div>`;
+      <div class="sitems">${g.items.map(e=>`<button class="srow ${e.status}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}"><span class="dot"></span><span class="stime num">${timeText(e)}</span><span class="stitle">${esc(e.title)}${dayTag(e)}<span class="scat">${esc(catLabel(e.cat))}</span></span><span class="pill st-${e.status}">${STATUS[e.status]}</span></button>`).join('')}</div></div>`;
   }).join('');
 }
 
 /* ---------- summary (dashboard) ---------- */
 function renderDashboard(){
   const ev=events(), today=ymd(now), nowM=now.getHours()*60+now.getMinutes();
-  const isPast=e=>e.date<today||(e.date===today&&eM(e)<=nowM);
+  const isPast=e=>overAt(e,today,nowM);
   const ws=weekStart(now), wsS=ymd(ws), weS=ymd(addDays(ws,6));
   const ms=ymd(new Date(now.getFullYear(),now.getMonth(),1)), me=ymd(new Date(now.getFullYear(),now.getMonth()+1,0));
   const todayEv=ev.filter(e=>e.date===today).sort(sortEv);
-  const weekEv=inRange(ev,wsS,weS).filter(active), monthEv=inRange(ev,ms,me).filter(active);
+  const weekEv=uniq(inRange(ev,wsS,weS)).filter(active), monthEv=uniq(inRange(ev,ms,me)).filter(active);
   const monthPast=monthEv.filter(e=>e.status==='selesai'||(isPast(e)&&!(e.seriesId&&e.status==='rencana'))), monthDone=monthPast.filter(e=>e.status==='selesai').length;
   const pct=monthPast.length?Math.round(monthDone/monthPast.length*100):0;
   const in14=ymd(addDays(now,14));
-  const upcoming=ev.filter(e=>active(e)&&(e.date>today||(e.date===today&&upM(e)>nowM))&&e.date<=in14).sort(sortEv);
+  const upcoming=ev.filter(e=>active(e)&&!e.cont&&(e.date>today||(e.date===today&&upM(e)>nowM))&&e.date<=in14).sort(sortEv);
   const sum=l=>l.reduce((a,e)=>a+dur(e),0);
   const monthName=fMonthLong.format(now);
   const uEv=n=>T('kegiatan',{n});
@@ -416,8 +429,8 @@ function renderDashboard(){
     :`<div class="empty">${catRange==='week'?T('Belum ada kegiatan minggu ini.'):T('Belum ada kegiatan bulan ini.')}</div>`;
 
   const from=ymd(addDays(now,-7));
-  const att=ev.filter(e=>e.status==='rencana'&&e.date>=from&&isPast(e)&&!e.seriesId).sort(sortEv).reverse();
-  const late=e=>{const d=Math.round((midnight(now)-parse(e.date))/864e5);return d<=0?T('Terlewat hari ini'):T('Telat {n} hari',{n:d})};
+  const att=ev.filter(e=>e.status==='rencana'&&!e.cont&&(e.endDate||e.date)>=from&&isPast(e)&&!e.seriesId).sort(sortEv).reverse();
+  const late=e=>{const d=Math.round((midnight(now)-parse(e.endDate||e.date))/864e5);return d<=0?T('Terlewat hari ini'):T('Telat {n} hari',{n:d})};
   $('attCount').textContent=att.length||'';
   $('attList').innerHTML=att.length?att.slice(0,5).map(e=>`<li style="${catStyle(e.cat)}"><button class="ev" data-open="${esc(e.id)}" style="flex:1;min-width:0"><span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span><span class="sub">${fDayShort.format(parse(e.date))} · ${timeText(e)} · <b class="late">${late(e)}</b></span></span></button>
     <span class="acts"><button class="btn tonal small" data-status="selesai" data-id="${esc(e.id)}">${T('Selesai')}</button><button class="btn text small" data-status="batal" data-id="${esc(e.id)}">${T('Batal')}</button></span></li>`).join('')+(att.length>5?`<li class="empty">${T('+{n} lainnya di tampilan Jadwal',{n:att.length-5})}</li>`:'')
@@ -457,8 +470,8 @@ function repPeriod(off){
 }
 function repStats(p){
   const today=ymd(now),nowM=now.getHours()*60+now.getMinutes();
-  const isPast=e=>e.date<today||(e.date===today&&eM(e)<=nowM);
-  const all=inRange(events(),ymd(p.a),ymd(p.b)),act=all.filter(active);
+  const isPast=e=>overAt(e,today,nowM);
+  const segs=inRange(events(),ymd(p.a),ymd(p.b)),all=uniq(segs),act=all.filter(active);
   // same rule as the "Selesai bulan ini" card: due = marked done, or already over (recurring plans that were never touched don't count)
   const due=act.filter(e=>e.status==='selesai'||(isPast(e)&&!(e.seriesId&&e.status==='rencana'))),dueSet=new Set(due);
   const done=act.filter(e=>e.status==='selesai');
@@ -466,7 +479,7 @@ function repStats(p){
   const postponed=act.filter(e=>e.status==='tunda').sort(sortEv);
   const late=due.filter(e=>e.status==='rencana').sort(sortEv);
   const planned=act.filter(e=>e.status==='rencana'&&!dueSet.has(e)).length;
-  return {all,act,due,done,late,postponed,planned,cancelled:all.length-act.length,pct:due.length?Math.round(done.length/due.length*100):0};
+  return {all,act,seg:segs.filter(active),due,done,late,postponed,planned,cancelled:all.length-act.length,pct:due.length?Math.round(done.length/due.length*100):0};
 }
 let repText='',repAIText='';
 function renderReport(){
@@ -505,7 +518,7 @@ function renderReport(){
 
   // week: each day; month: events summed per weekday, which shows the rhythm of the whole month
   const cols=[...Array(7)].map(()=>({total:0,byC:{}})),perDay={};
-  s.act.forEach(e=>{
+  s.seg.forEach(e=>{ // per day, so a multi-day event busies every day it covers
     const c=cols[(parse(e.date).getDay()+6)%7],k=catKey(e.cat);
     c.total++;c.byC[k]=(c.byC[k]||0)+1;(perDay[e.date]=perDay[e.date]||[]).push(e);
   });
@@ -557,7 +570,7 @@ function renderReport(){
     ...(s.postponed.length?['',`${T('Ditunda')} (${s.postponed.length}):`,...s.postponed.slice(0,10).map(e=>`- ${e.title} (${fDayShort.format(parse(e.date))})`)]:[])].join('\n');
 
   // what the AI reads: the report plus the period's events (never the notes); capped so a Groq request stays small
-  const AI_EVENTS=100,evLines=s.all.slice().sort(sortEv).map(e=>`${e.date} ${fWd.format(parse(e.date))} ${timeText(e)} [${catLabel(e.cat)}] ${e.status} | ${String(e.title).replace(/\s+/g,' ').slice(0,80)}`);
+  const AI_EVENTS=100,evLines=s.all.slice().sort(sortEv).map(e=>{const b=e.spanId&&rawEv(e.spanId)||e;return `${b.date}${isSpan(b)?'→'+b.endDate:''} ${fWd.format(parse(b.date))} ${isSpan(b)?(b.start||'')+(b.end?'–'+b.end:''):timeText(e)} [${catLabel(e.cat)}] ${e.status} | ${String(e.title).replace(/\s+/g,' ').slice(0,80)}`});
   repAIText=repText+'\n\nEVENT LIST (date weekday time [category] status | title):\n'+evLines.slice(0,AI_EVENTS).join('\n')+(evLines.length>AI_EVENTS?`\n(+${evLines.length-AI_EVENTS} more not shown)`:'');
   let hsh=0;for(let i=0;i<repAIText.length;i++)hsh=(hsh*31+repAIText.charCodeAt(i))|0;
   repKey=`${repMode}|${ymd(p.a)}|${I18N.lang}|${hsh}`; // the explanation is reused until the numbers (or the language) change
@@ -715,9 +728,13 @@ function openDetail(id){
   if(!e){closeDetail();return}
   detailId=id;
   const grp=e.groupId?events().filter(x=>x.groupId===e.groupId).length:0;
+  const sp=e.spanId?rawEv(e.spanId):null; // a multi-day event: show the whole range, not just the day that was clicked
+  const when=sp?`${fDayShort.format(parse(sp.date))}${sp.start?' '+sp.start:''} → ${fDayShort.format(parse(sp.endDate))}${sp.end?' '+sp.end:''} · ${T('{n} hari',{n:e.dayN})}`
+    :`${fDayShort.format(parse(e.date))} · ${e.start&&e.end?`${e.start} – ${e.end} <span class="num">(${fmtH(dur(e))} ${T('jam')})</span>`:timeText(e)}`;
   $('detBody').innerHTML=`
-    <div class="det-row" style="${catStyle(e.cat)}"><span class="det-sw"></span><div><h2 id="detTitle" class="${e.status==='batal'?'strike':''}">${esc(e.title)}</h2><div class="det-when">${fDayShort.format(parse(e.date))} · ${e.start&&e.end?`${e.start} – ${e.end} <span class="num">(${fmtH(dur(e))} ${T('jam')})</span>`:timeText(e)}</div></div></div>
+    <div class="det-row" style="${catStyle(e.cat)}"><span class="det-sw"></span><div><h2 id="detTitle" class="${e.status==='batal'?'strike':''}">${esc(e.title)}</h2><div class="det-when">${when}</div></div></div>
     <div class="det-row"><span class="ms">sell</span><span>${esc(catLabel(e.cat))}</span></div>
+    ${sp?`<div class="det-row"><span class="ms">calendar_month</span><span>${T('Hari ke-{a} dari {b}',{a:e.dayNo,b:e.dayN})}</span></div>`:''}
     ${e.seriesId?`<div class="det-row"><span class="ms">event_repeat</span><span>${T('Berulang')}: ${esc(ruleText(e.repeat,rawEv(e.seriesId).date))}</span></div>`:''}
     ${grp>1?`<div class="det-row"><span class="ms">event_repeat</span><span>${T('Bagian dari kegiatan berulang ({n} kegiatan)',{n:grp})}</span></div>`:''}
     ${e.notes?`<div class="det-row"><span class="ms">notes</span><div class="det-notes">${linkify(e.notes)}</div></div>`:''}
@@ -744,6 +761,8 @@ $('detOv').addEventListener('click',e=>{
 /* ---------- delete (shared by detail + form) ---------- */
 function delMarkup(ev,confirming){
   const grp=ev.groupId&&events().filter(x=>x.groupId===ev.groupId).length>1;
+  const span=ev.dayN||(isSpan(ev)?Math.round((parse(ev.endDate)-parse(ev.date))/864e5)+1:0);
+  if(confirming&&span)return `<span>${T('Hapus seluruh kegiatan ({n} hari)?',{n:span})}</span><button type="button" class="btn small danger" data-del="one">${T('Ya, hapus')}</button><button type="button" class="btn small text" data-del="no">${T('Tidak')}</button>`;
   if(confirming&&ev.seriesId)return `<span>${T('Hapus kegiatan ini?')}</span><button type="button" class="btn small danger" data-del="one">${T('Hanya tanggal ini')}</button><button type="button" class="btn small danger" data-del="all">${T('Seluruh seri')}</button><button type="button" class="btn small text" data-del="no">${T('Tidak')}</button>`;
   return confirming
     ?`<span>${T('Hapus kegiatan ini?')}</span><button type="button" class="btn small danger" data-del="one">${T('Ya, hapus')}</button>${grp?`<button type="button" class="btn small danger" data-del="all">${T('Hapus semua berulang')}</button>`:''}<button type="button" class="btn small text" data-del="no">${T('Tidak')}</button>`
@@ -757,7 +776,7 @@ async function handleDel(zone,ev,action,done){
     try{await saveMany([{...s,repeat:{...s.repeat,skip:[...(s.repeat.skip||[]),ev.date]}}]);done();toast(T('Dihapus'))}catch(err){toast(T('Gagal menghapus. {m}',{m:err.message}))}
     return;
   }
-  const ids=ev.seriesId?[ev.seriesId]:action==='all'?events().filter(x=>x.groupId===ev.groupId).map(x=>x.id):[ev.id];
+  const ids=ev.seriesId?[ev.seriesId]:ev.spanId?[ev.spanId]:action==='all'?events().filter(x=>x.groupId===ev.groupId).map(x=>x.id):[ev.id];
   try{await removeMany(ids);done();toast(ids.length>1?T('{n} kegiatan dihapus',{n:ids.length}):T('Dihapus'))}catch(err){toast(T('Gagal menghapus. {m}',{m:err.message}))}
 }
 $('delZone').addEventListener('click',e=>{const b=e.target.closest('[data-del]');if(b&&editing)handleDel($('delZone'),editing,b.dataset.del,closeForm)});
@@ -801,6 +820,7 @@ function updateRepeatUI(){
   $('repPreview').textContent=!n?T('Belum ada tanggal yang cocok'):rule.until?T('Akan tampil {n} kali',{n}):T('Terus berulang');
 }
 function openForm(e,date,startTime){
+  if(e&&e.spanId)e=rawEv(e.spanId)||e; // editing any day of a multi-day event edits the whole event
   editing=e||null;
   closeDrawer();
   $('mTitle').textContent=e?T('Ubah kegiatan'):T('Tambah kegiatan');
@@ -818,7 +838,8 @@ function openForm(e,date,startTime){
   $('f-repeat').value=presetOf(ser?.repeat,ser?.date);$('f-until').value=ser?ser.repeat.until:'';$('f-open').checked=!!ser&&!ser.repeat.until;
   $('repeatWrap').hidden=!!e&&!ser;               // an existing one-off event cannot become a series
   $('f-status').closest('label').hidden=!!ser;     // per-date status is set from each occurrence instead
-  updateRepeatUI();
+  $('f-enddate').value=e?.endDate||'';$('spanRow').hidden=!!ser; // a recurring item cannot also span days
+  updateRepeatUI();updateSpanUI();
   $('f-err').hidden=true;
   $('delZone').innerHTML=e?delMarkup(e,false):'';
   $('formOv').hidden=false;
@@ -828,6 +849,19 @@ function closeForm(){
   $('formOv').hidden=true;editing=null;
   if(returnDay){const d=returnDay;returnDay=null;openDay(d)}
 }
+// "until date" (multi-day): moving the start past it clears it; a multi-day event cannot repeat
+function updateSpanUI(){
+  const d=$('f-date').value;
+  $('f-enddate').min=d||'';
+  if($('f-enddate').value&&d&&$('f-enddate').value<d)$('f-enddate').value='';
+  const ed=$('f-enddate').value,multi=!!ed&&ed>d;
+  $('spanPreview').textContent=multi?T('{n} hari',{n:Math.round((parse(ed)-parse(d))/864e5)+1}):'';
+  $('spanHint').hidden=!multi;
+  if(multi){$('f-repeat').value='none';$('repeatWrap').hidden=true;updateRepeatUI()}
+  else $('repeatWrap').hidden=!!editing&&!editing.seriesId;
+}
+$('f-enddate').addEventListener('input',updateSpanUI);
+$('f-date').addEventListener('input',updateSpanUI);
 $('f-notime').onclick=()=>{$('f-start').value='';$('f-end').value=''};
 $('f-repeat').addEventListener('change',()=>{$('f-until').value=defaultUntil();updateRepeatUI()});
 $('f-until').addEventListener('input',updateRepeatUI);
@@ -841,9 +875,12 @@ $('evForm').addEventListener('submit',async ev=>{
   const err=m=>{$('f-err').textContent=m;$('f-err').hidden=false};
   if(!title)return err(T('Isi judul kegiatan.'));
   if(!date)return err(T('Pilih tanggal.'));
-  if(start&&end&&mins(end)<=mins(start))return err(T('Jam selesai harus setelah jam mulai.'));
+  const endDate=$('spanRow').hidden?'':$('f-enddate').value,multi=!!endDate&&endDate>date;
+  if(endDate&&endDate<date)return err(T('Tanggal selesai harus sama atau setelah tanggal mulai.'));
+  if(multi&&(parse(endDate)-parse(date))/864e5>365)return err(T('Kegiatan beberapa hari maksimal 1 tahun.'));
+  if(!multi&&start&&end&&mins(end)<=mins(start))return err(T('Jam selesai harus setelah jam mulai.'));
   const catIn=document.querySelector('input[name=cat]:checked');
-  const base={title,date,start,end,cat:catIn?catIn.value:'',status:$('f-status').value,notes:$('f-notes').value.trim()};
+  const base={title,date,start,end,cat:catIn?catIn.value:'',status:$('f-status').value,notes:$('f-notes').value.trim(),endDate:multi?endDate:undefined};
   let list;
   const ser=editing&&editing.seriesId?rawEv(editing.seriesId):null;
   const rule=($('repeatWrap').hidden)?null:readRule();
@@ -873,7 +910,7 @@ $('evForm').addEventListener('submit',async ev=>{
 
 /* ---------- category manager ---------- */
 let cmState={palette:null,del:null};
-function catCount(id){return events().filter(e=>e.cat===id).length}
+function catCount(id){return uniq(events()).filter(e=>e.cat===id).length}
 function renderCatManager(){
   $('cmList').innerHTML=cats.length?cats.map(c=>{
     const n=catCount(c.id),nm=catName(c);
@@ -975,10 +1012,10 @@ function aiContext(withTools=true){
   const ev=events(),from=ymd(addDays(now,-60)),to=ymd(addDays(now,60)),t0=midnight(now);
   const dist=e=>Math.abs(parse(e.date)-t0);
   const maxLines=AI_MAX_LINES[aiProv]||100;
-  const picked=inRange(ev.filter(e=>!e.seriesId),from,to).sort((a,b)=>dist(a)-dist(b)).slice(0,maxLines).sort(sortEv);
+  const picked=inRange(ev.filter(e=>!e.seriesId&&!e.cont),from,to).sort((a,b)=>dist(a)-dist(b)).slice(0,maxLines).sort(sortEv);
   aiRefs=new Map();
   const noteLabel=en?'notes: ':'catatan: ';
-  const lines=picked.map((e,i)=>{aiRefs.set(String(i+1),e.id);return `#${i+1} ${e.date} ${fWd.format(parse(e.date))} ${aiTime(e)} |${catLabel(e.cat)} | ${e.title} | ${STATUS[e.status]}${e.notes?' | '+noteLabel+e.notes.replace(/\s+/g,' ').slice(0,100):''}`});
+  const lines=picked.map((e,i)=>{aiRefs.set(String(i+1),e.id);return `#${i+1} ${e.date}${e.endDate?(en?' to ':' sampai ')+e.endDate+(en?' (multi-day: first day, start time only; last day, end time only)':' (beberapa hari: hari pertama hanya jam mulai, hari terakhir hanya jam selesai)'):''} ${fWd.format(parse(e.date))} ${aiTime(e)} |${catLabel(e.cat)} | ${e.title} | ${STATUS[e.status]}${e.notes?' | '+noteLabel+e.notes.replace(/\s+/g,' ').slice(0,100):''}`});
   // A recurring series is sent as ONE line: its rule plus the dates the APP computed for a window around today, with
   // cancelled and removed dates spelled out. Models must never re-derive dates from the rule (they ignore removed dates).
   const ws0=weekStart(now),m0=new Date(now.getFullYear(),now.getMonth(),1),m1=new Date(now.getFullYear(),now.getMonth()+1,0);

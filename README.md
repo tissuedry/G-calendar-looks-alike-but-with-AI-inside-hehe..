@@ -31,6 +31,7 @@ Berjalan gratis di **Vercel** (frontend + API), data di **Supabase** (Postgres),
 **Kalender**
 - Tampilan **Hari, 3 hari, Minggu, Bulan**, dan **Jadwal** (daftar dengan pencarian dan filter periode, kategori, status).
 - Klik slot kosong di tampilan hari/minggu untuk membuat kegiatan di jam itu. Geser kiri/kanan di HP untuk pindah periode.
+- Kegiatan beberapa hari (isi "Sampai tanggal" di form): tampil di setiap harinya dengan penanda 1/3, 2/3, dst., dan dihitung satu kegiatan di dashboard dan laporan. Tidak bisa digabung dengan pengulangan.
 - Kegiatan berulang (harian, hari kerja, mingguan, bulanan), status (direncanakan, selesai, ditunda, dibatalkan), catatan dengan link yang bisa diklik.
 - Kategori yang bisa diubah nama dan warnanya, plus filter tampil/sembunyi per kategori.
 - Kalender mini, garis "sekarang", tampilan gelap otomatis mengikuti perangkat.
