@@ -70,7 +70,7 @@ const EN = {
   "semua sudah ditandai": "all marked",
   "Belum ada yang jatuh tempo": "Nothing due yet",
   "Penjelasan AI": "AI explanation",
-  "Ringkasan, hal yang berjalan baik, yang perlu diperhatikan, dan saran. Yang dikirim ke AI hanya angka laporan ini dan judul kegiatan yang belum ditandai atau ditunda.": "A summary, what went well, what needs attention, and tips. Only this report's numbers and the titles of events that are unmarked or postponed are sent to the AI.",
+  "AI membaca angka laporan dan daftar kegiatan periode ini (judul, tanggal, jam, kategori, status; catatan tidak ikut dikirim), lalu memberi ringkasan, hal yang berjalan baik, yang perlu diperhatikan, dan saran.": "The AI reads this report's numbers and the list of events in this period (title, date, time, category, status; notes are not sent), then gives a summary, what went well, what needs attention, and tips.",
   "Buat penjelasan": "Generate explanation",
   "Buat ulang": "Regenerate",
   "AI sedang menyusun penjelasan…": "The AI is writing the explanation…",

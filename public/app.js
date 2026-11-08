@@ -468,14 +468,14 @@ function repStats(p){
   const planned=act.filter(e=>e.status==='rencana'&&!dueSet.has(e)).length;
   return {all,act,due,done,late,postponed,planned,cancelled:all.length-act.length,pct:due.length?Math.round(done.length/due.length*100):0};
 }
-let repText='';
+let repText='',repAIText='';
 function renderReport(){
   const p=repPeriod(repOff),s=repStats(p),pv=repStats(repPeriod(repOff-1)),isW=repMode==='week';
   const range=isW?rangeLabel(p.a,p.b):fMonthLong.format(p.a)+' '+p.a.getFullYear();
   $('repRange').textContent=range;
   $('rNow').disabled=repOff===0;
   document.querySelectorAll('#repSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.rmode===repMode));
-  if(!s.all.length){repText='';repKey='';$('repBody').innerHTML=`<div class="empty">${T('Belum ada kegiatan di periode ini.')}</div>`;return}
+  if(!s.all.length){repText='';repAIText='';repKey='';$('repBody').innerHTML=`<div class="empty">${T('Belum ada kegiatan di periode ini.')}</div>`;return}
 
   // 1. one-sentence summary
   const w=T(isW?'minggu lalu':'bulan lalu'),parts=[];
@@ -556,7 +556,10 @@ function renderReport(){
     ...(s.late.length?['',`${T('Belum ditandai')} (${s.late.length}):`,...s.late.slice(0,10).map(e=>`- ${e.title} (${fDayShort.format(parse(e.date))})`)]:[]),
     ...(s.postponed.length?['',`${T('Ditunda')} (${s.postponed.length}):`,...s.postponed.slice(0,10).map(e=>`- ${e.title} (${fDayShort.format(parse(e.date))})`)]:[])].join('\n');
 
-  let hsh=0;for(let i=0;i<repText.length;i++)hsh=(hsh*31+repText.charCodeAt(i))|0;
+  // what the AI reads: the report plus the period's events (never the notes); capped so a Groq request stays small
+  const AI_EVENTS=100,evLines=s.all.slice().sort(sortEv).map(e=>`${e.date} ${fWd.format(parse(e.date))} ${timeText(e)} [${catLabel(e.cat)}] ${e.status} | ${String(e.title).replace(/\s+/g,' ').slice(0,80)}`);
+  repAIText=repText+'\n\nEVENT LIST (date weekday time [category] status | title):\n'+evLines.slice(0,AI_EVENTS).join('\n')+(evLines.length>AI_EVENTS?`\n(+${evLines.length-AI_EVENTS} more not shown)`:'');
+  let hsh=0;for(let i=0;i<repAIText.length;i++)hsh=(hsh*31+repAIText.charCodeAt(i))|0;
   repKey=`${repMode}|${ymd(p.a)}|${I18N.lang}|${hsh}`; // the explanation is reused until the numbers (or the language) change
   $('repBody').innerHTML=`<p class="repsum">${esc(sentence)}</p><div id="repAI"></div>`+tiles+stack
     +`<h3>${T('Per kategori')}</h3><p class="hint">${T('Panjang bar = jumlah kegiatan; bagian pekat = yang selesai.')}</p><div class="cats">${catHtml}</div><p class="reppara">${esc(hoursLine)}</p>`
@@ -593,7 +596,7 @@ function renderRepAI(){
     const p=aiProviders?.find(x=>x.id===id);
     return `<button type="button" data-rprov="${id}" aria-pressed="${id===aiProv}"${aiProviders&&!p?.available?' disabled':''} title="${esc(p?(p.available?p.model:T('API key {n} belum diatur di server',{n:p.name})):'')}">${id==='groq'?'Groq':'Gemini'}</button>`;
   }).join('');
-  box.innerHTML=`<div class="rai">${head()}<p class="rai-note">${T('Ringkasan, hal yang berjalan baik, yang perlu diperhatikan, dan saran. Yang dikirim ke AI hanya angka laporan ini dan judul kegiatan yang belum ditandai atau ditunda.')}</p>
+  box.innerHTML=`<div class="rai">${head()}<p class="rai-note">${T('AI membaca angka laporan dan daftar kegiatan periode ini (judul, tanggal, jam, kategori, status; catatan tidak ikut dikirim), lalu memberi ringkasan, hal yang berjalan baik, yang perlu diperhatikan, dan saran.')}</p>
     <div class="rai-act"><div class="seg" role="radiogroup" aria-label="${T('Model AI')}">${provs}</div><button class="btn primary small" data-rai>${T('Buat penjelasan')}</button></div>
     ${repAIErr?`<p class="rai-err">${esc(repAIErr)}</p>`:''}</div>`;
 }
@@ -601,7 +604,7 @@ async function runRepAI(){
   const key=repKey;if(!repText||repBusy.has(key))return;
   repBusy.add(key);repAIErr='';renderRepAI();
   try{
-    const d=await api('report',{method:'POST',body:{text:repText,kind:repMode,current:repOff===0,lang:I18N.lang,provider:aiProv||undefined}});
+    const d=await api('report',{method:'POST',body:{text:repAIText,kind:repMode,current:repOff===0,lang:I18N.lang,provider:aiProv||undefined}});
     repAICache.set(key,d);
   }catch(e){repAIErr=e.message||T('Terjadi gangguan. Coba kirim lagi.')}
   finally{repBusy.delete(key);if(key===repKey)renderRepAI()}
