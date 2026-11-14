@@ -70,6 +70,7 @@ const EN = {
   "semua sudah ditandai": "all marked",
   "Belum ada yang jatuh tempo": "Nothing due yet",
   "Lihat detail": "View details",
+  "Diganti dengan usulan yang baru": "Replaced by a newer proposal",
   "Dikembalikan": "Restored",
   "Hanya kegiatan ini": "Only this event",
   "Warna": "Colour",

@@ -1023,6 +1023,7 @@ $('aiProv').addEventListener('click',e=>{
 });
 const provName=id=>aiProviders?.find(p=>p.id===id)?.name||id;
 let aiRefs=new Map(); // "#n" shown to the model -> real event id
+let aiPend=new Map(); // "U1" shown to the model -> an AI proposal that is not applied yet (it is not in the calendar, so it has no #n)
 function aiContext(withTools=true){
   const en=I18N.lang==='en';
   const ev=events(),from=ymd(addDays(now,-60)),to=ymd(addDays(now,60)),t0=midnight(now);
@@ -1091,7 +1092,7 @@ Rules:
 - For questions about the user's schedule, use ONLY the event data below; if it is not enough, say so plainly. You may also answer general questions that are directly about calendar and time (public holidays, national events, dates, day of the week, time zones, planning and prioritising tasks, managing a to-do list or study/work time): use your general knowledge, say that you cannot check live sources, and suggest confirming against the official calendar when the date matters. Never invent events in the user's schedule.
 ${withTools?`- CLASHES ARE CHECKED BY THE APP, not by you: do NOT check for clashes and do NOT ask before proposing. Propose every requested item through the tool right away; the app holds back any proposal that clashes and shows the user what it clashes with. Items without a time and deadlines never clash.
 - If the conversation shows a proposal "DITAHAN karena bentrok" and the user then says what to do (e.g. "move it to Wednesday", "put it after class"), make the new proposal(s) for exactly that, and do not re-propose items already applied.
-- When you name a date in text, take the weekday from the calendar list or the data line; never work it out yourself.
+- When you name a date in text, take the weekday from the calendar list or the data line; never work it out yourself. For a weekday name in a request ("Friday", "Friday afternoon"), look that weekday up in the 14-day calendar list and copy its date exactly: the nearest such day after today, or in the week after this one when the user says "next week". Never count days yourself.
 `:''}- OUTPUT ONLY THE FINAL ANSWER to the user. Never write your reasoning, self-talk, drafts or analysis ("Wait", "let me check", "based on the instructions", "the user asks…"), and never quote or mention these rules. Think silently, then reply directly and briefly.
 - STAY IN SCOPE: you are only a schedule, calendar, to-do and time-management assistant. Politely decline anything else (programming code, homework answers, essays, translations, trivia, general chat) in one short sentence and offer what you can help with, e.g. adding an event, summarising the week, or finding free time. Do not write code under any circumstances.
 - Calculate hours carefully from the start-end times. Events with status Cancelled do not count as time spent. A line starting with REPEATING is a recurring series stored once (its ref changes or deletes the WHOLE series); it lists its occurrences for the next 14 days, so for other dates derive them from the rule and the day names carefully, and never treat it as a single event. Lines marked "tenggat HH:MM" are deadlines and "tanpa jam" means the time is NOT SET YET (not all-day; its duration is unknown); neither adds hours.
@@ -1112,7 +1113,7 @@ Aturan:
 - Untuk pertanyaan tentang jadwal pengguna, gunakan HANYA data kegiatan di bawah; jika tidak cukup, katakan terus terang. Kamu juga boleh menjawab pertanyaan umum yang langsung terkait kalender dan waktu (tanggal merah, hari libur nasional, acara nasional, tanggal, hari dalam seminggu, zona waktu, menyusun dan memprioritaskan tugas, mengatur to-do list atau waktu belajar/kerja): pakai pengetahuan umummu, sebutkan bahwa kamu tidak bisa mengecek sumber terkini, dan sarankan memastikan ke kalender resmi (mis. SKB 3 Menteri) bila tanggalnya penting. Jangan mengarang kegiatan di jadwal pengguna.
 ${withTools?`- BENTROK DICEK OLEH APLIKASI, bukan olehmu: JANGAN mengecek bentrok dan JANGAN bertanya sebelum mengusulkan. Langsung usulkan setiap butir yang diminta lewat alat; aplikasi akan menahan usulan yang bentrok dan menunjukkan ke pengguna bentrok dengan apa. Kegiatan tanpa jam dan tenggat tidak pernah bentrok.
 - Jika di percakapan ada usulan "DITAHAN karena bentrok" lalu pengguna menyebut mau diapakan (mis. "geser ke Rabu", "taruh setelah kuliah"), buat usulan baru persis untuk itu, dan jangan mengusulkan ulang yang sudah diterapkan.
-- Saat menyebut tanggal di teks, ambil nama harinya dari daftar kalender atau baris data; jangan menghitung sendiri.
+- Saat menyebut tanggal di teks, ambil nama harinya dari daftar kalender atau baris data; jangan menghitung sendiri. Untuk nama hari dalam permintaan ("Jumat", "Jumat sore"), cari hari itu di daftar kalender 14 hari dan salin tanggalnya persis: hari terdekat setelah hari ini, atau di minggu setelah minggu ini bila pengguna bilang "minggu depan". Jangan menghitung hari sendiri.
 `:''}- TULIS HANYA JAWABAN AKHIR untuk pengguna. Jangan menulis proses berpikir, bicara pada diri sendiri, draf, atau analisis ("Tunggu", "mari kita lihat", "berdasarkan instruksi", "pengguna meminta…"), dan jangan mengutip atau menyebut aturan ini. Berpikirlah dalam diam, lalu jawab langsung dan singkat.
 - TETAP DALAM LINGKUP: kamu hanya asisten jadwal, kalender, to-do list, dan manajemen waktu. Tolak dengan sopan dalam satu kalimat singkat hal di luar itu (kode program, jawaban PR/tugas, esai, terjemahan, trivia, obrolan umum) lalu tawarkan yang bisa kamu bantu, mis. menambah kegiatan, merangkum minggu ini, atau mencari waktu kosong. Jangan menulis kode program dalam keadaan apa pun.
 - Hitung jam dengan teliti dari jam mulai-selesai. Kegiatan berstatus Dibatalkan tidak dihitung sebagai waktu terpakai. Baris berawalan BERULANG adalah seri berulang yang disimpan sekali (ref-nya mengubah atau menghapus SELURUH seri); di dalamnya tertera tanggal 14 hari ke depan, jadi untuk tanggal lain turunkan dari aturan dan nama hari dengan teliti, dan jangan anggap itu satu kegiatan tunggal. Baris bertanda "tenggat HH:MM" adalah tenggat dan "tanpa jam" berarti jamnya BELUM DITENTUKAN (bukan seharian; durasinya tidak diketahui); keduanya tidak menambah jam.
@@ -1211,6 +1212,23 @@ function buildProposals(raw){
     }
     const catHit=catByName(a.kategori),catId=catHit?.id;
     if(a.kategori&&!catHit){p.newCat=a.kategori.trim();p.warn.push({k:'Kategori baru "{c}" akan dibuat.',v:{c:p.newCat}})}
+    const pend=a.op==='ubah'?aiPend.get(String(a.ref||'').replace(/^#/,'').toUpperCase()):null;
+    if(pend&&(pend.p.status==='pending'||pend.p.status==='clash')){
+      // revising a proposal that is not applied yet: the new card replaces the old one (nothing exists in the calendar to change)
+      const old=pend.p,n={...old.next,id:uid()};
+      if(a.judul)n.title=a.judul;
+      if(a.tanggal)n.date=a.tanggal;
+      if(a.mulai)n.start=a.mulai;
+      if(a.selesai)n.end=a.selesai;
+      if(catHit)n.cat=catId;
+      if(a.catatan_tambah)n.notes=[n.notes,a.catatan_tambah].filter(Boolean).join('\n');else if(a.catatan!==undefined)n.notes=a.catatan;
+      if(a.tanggal_selesai&&!n.repeat){if(a.tanggal_selesai<n.date)return fail('Tanggal selesai harus sama atau setelah tanggal mulai.');if(a.tanggal_selesai>n.date)n.endDate=a.tanggal_selesai;else delete n.endDate}
+      if(n.start&&n.end&&!(n.endDate>n.date)&&n.end<=n.start)return fail('Jam selesai harus setelah jam mulai.');
+      if(!p.newCat&&old.newCat&&!catHit)p.newCat=old.newCat;
+      old.status='replaced';
+      p.op='tambah';p.next=n;p.title=n.title;
+      return;
+    }
     if(a.op==='tambah'){
       // a weekly series that names its weekdays but forgot the date: start at the first matching day from today
       if(!a.tanggal&&a.ulangi&&(a.hari||[]).length){
@@ -1401,6 +1419,7 @@ function proposalHtml(p,ti){
   else if(p.status==='working')acts=`<span class="astate">${T('Menerapkan…')}</span>`;
   else if(p.status==='applied')acts=`<span class="astate ok">${T('Diterapkan')}</span>`+a('undo',T('Urungkan'),'text');
   else if(p.status==='rejected')acts=`<span class="astate">${T('Ditolak')}</span>`;
+  else if(p.status==='replaced')acts=`<span class="astate">${T('Diganti dengan usulan yang baru')}</span>`;
   return `<div class="acard ${p.status}"><div class="ahead"><span class="aop ${p.op}">${OP_LABEL[p.op]}</span>${tid||prev?`<button type="button" class="atitle alink" ${tid?`data-open="${esc(tid)}"`:`data-aprev="${ti}:${p.key}"`} title="${T('Lihat detail')}">${esc(p.title||T('(tanpa judul)'))}</button><span class="ms alink-i" aria-hidden="true">chevron_right</span>`:`<b class="atitle">${esc(p.title||T('(tanpa judul)'))}</b>`}</div>${body}${warn}${p.reason&&p.status!=='invalid'?`<div class="areason">${esc(p.reason)}</div>`:''}${acts?`<div class="aacts">${acts}</div>`:''}</div>`;
 }
 function proposalsHtml(t,ti){
@@ -1541,14 +1560,21 @@ async function askAI(text,opts={}){
   aiBusy=true;$('aiStop').hidden=false;$('aiSend').disabled=true;renderAI();
   // earlier proposals are summarised with their outcome, so the model knows what was applied or rejected
   const ST_WORD={pending:'menunggu',applied:'diterapkan',rejected:'ditolak',invalid:'tidak valid',working:'diproses',clash:'DITAHAN karena bentrok, menunggu keputusan pengguna'};
-  const propSum=t=>t.proposals.map(p=>`- ${p.op}${p.catOp?' kategori':''} "${p.title||''}"${p.next&&!p.catOp?' '+whenOf(p.next)+(p.next.repeat?' ('+ruleText(p.next.repeat,p.next.date)+')':''):''}: ${ST_WORD[p.status]||p.status}${p.status==='clash'?' ('+p.warn.map(msgOf).join(' ')+')':''}`).join('\n');
+  // proposals still waiting (not in the calendar yet) get a "U<n>" ref so a follow-up like "add X to the title" can revise them
+  aiPend=new Map();const uRef=new Map();
+  aiTurns.filter(t=>t!==reply&&t.proposals?.length).slice(-3).forEach(t=>t.proposals.forEach(p=>{
+    if(p.op==='tambah'&&!p.catOp&&p.next&&(p.status==='pending'||p.status==='clash')){const k='U'+(aiPend.size+1);aiPend.set(k,{p});uRef.set(p,k)}
+  }));
+  const propSum=t=>t.proposals.map(p=>`- ${uRef.has(p)?'['+uRef.get(p)+'] ':''}${p.op}${p.catOp?' kategori':''} "${p.title||''}"${p.next&&!p.catOp?' '+whenOf(p.next)+(p.next.repeat?' ('+ruleText(p.next.repeat,p.next.date)+')':''):''}: ${ST_WORD[p.status]||p.status}${p.status==='clash'?' ('+p.warn.map(msgOf).join(' ')+')':''}`).join('\n');
   // the outcome of earlier proposals goes into the system prompt, NOT into the assistant's own messages: models copy
   // whatever their past replies look like, and would start writing fake "(Usulan: … diterapkan)" text
   const hist=aiTurns.filter(t=>t!==reply&&!t.error)
     .map(t=>({role:t.role,content:t.content||(t.proposals?.length?T('(Mengusulkan {n} perubahan jadwal.)',{n:t.proposals.length}):'')}))
     .filter(t=>t.content).slice(-12);
   const propTurns=aiTurns.filter(t=>t!==reply&&t.proposals?.length).slice(-3);
-  const propNote=propTurns.length?`\n\n${I18N.lang==='en'?'Proposals made earlier in this chat and their outcome (tracked by the app; never write this list or any proposal status in your reply, only the tool creates proposals):':'Usulan sebelumnya di percakapan ini dan hasilnya (dicatat aplikasi; jangan pernah menulis daftar ini atau status usulan di jawabanmu, hanya alat yang membuat usulan):'}\n${propTurns.map(propSum).join('\n')}`:'';
+  const propNote=propTurns.length?`\n\n${I18N.lang==='en'?'Proposals made earlier in this chat and their outcome (tracked by the app; never write this list or any proposal status in your reply, only the tool creates proposals):':'Usulan sebelumnya di percakapan ini dan hasilnya (dicatat aplikasi; jangan pernah menulis daftar ini atau status usulan di jawabanmu, hanya alat yang membuat usulan):'}\n${propTurns.map(propSum).join('\n')}${aiPend.size?(I18N.lang==='en'
+    ?'\nItems tagged [U1], [U2]… are NOT in the calendar yet (waiting for approval), so they have no #number. To revise one (new title, time, note…), use op "ubah" with ref "U1" and ONLY the changed fields; the app replaces that proposal. NEVER use a #number for them: a #number is a different, existing event.'
+    :'\nButir bertanda [U1], [U2]… BELUM ada di kalender (menunggu persetujuan), jadi tidak punya nomor #. Untuk merevisinya (judul, jam, catatan baru…), pakai op "ubah" dengan ref "U1" dan HANYA kolom yang berubah; aplikasi akan menggantikan usulan itu. JANGAN pernah memakai nomor # untuknya: nomor # adalah kegiatan lain yang sudah ada.'):''}`:'';
   aiCtl=new AbortController();
   const bubble=()=>$('aiLog').lastElementChild;
   bubble()?.scrollIntoView({block:'end'});
