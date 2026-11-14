@@ -319,7 +319,7 @@ function renderMonth(){
     const s=ymd(d),list=(byDay[s]||[]).sort(sortEv);
     html+=`<div class="mcell ${d.getMonth()!==m0.getMonth()?'out':''} ${s===today?'today':''}" data-day="${s}" role="button" tabindex="0" aria-label="${fDay.format(d)}, ${T('{n} kegiatan',{n:list.length})}">
       <button class="mdn" data-goday="${s}">${d.getDate()===1?fDM.format(d):d.getDate()}</button>
-      ${list.slice(0,3).map(e=>`<button class="mchip ${e.status} ${dur(e)>=360?'long '+lightCls(e.cat):''}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}"><i></i>${e.start||e.end?`<span class="mt">${e.start||e.end}</span>`:''}<span class="mtt">${esc(e.title)}${dayTag(e)}</span></button>`).join('')}
+      ${list.slice(0,3).map(e=>`<button class="mchip ${e.status} ${dur(e)>=360&&e.status!=='selesai'?'long '+lightCls(e.cat):''}" data-open="${esc(e.id)}" style="${catStyle(e.cat)}"><i></i>${e.start||e.end?`<span class="mt">${e.start||e.end}</span>`:''}<span class="mtt">${esc(e.title)}${dayTag(e)}</span></button>`).join('')}
       ${list.length>3?`<button class="mmore" data-day="${s}">${T('{n} lainnya',{n:list.length-3})}</button>`:''}
       <span class="dots">${list.slice(0,6).map(e=>`<i style="${catStyle(e.cat)}"></i>`).join('')}</span></div>`;
   }
@@ -411,7 +411,7 @@ function renderDashboard(){
   $('todayMeta').textContent=todayH?T('{h} jam berdurasi',{h:fmtH(todayH)}):'';
   let nextMarked=false;
   $('todayList').innerHTML=todayEv.length?todayEv.map(e=>{
-    const en=eM(e),isNow=!!e.start&&mins(e.start)<=nowM&&nowM<en&&active(e);
+    const en=eM(e),isNow=!!e.start&&mins(e.start)<=nowM&&nowM<en&&active(e)&&e.status!=='selesai';
     let flag='';
     if(isNow)flag=`<span class="flag now">${T('Berlangsung')}</span>`;
     else if(!nextMarked&&e.start&&mins(e.start)>nowM&&active(e)){nextMarked=true;flag=`<span class="flag next">${T('Berikutnya')}</span>`}

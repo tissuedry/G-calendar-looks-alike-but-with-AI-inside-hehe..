@@ -204,8 +204,6 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 .mchip.selesai{opacity:.6}
 .mchip.selesai .mtt,.mchip.selesai .mt{color:var(--faint)}
 .mchip.selesai i{background:var(--faint)}
-.mchip.long.selesai{background:color-mix(in srgb,var(--faint) 28%,var(--surface));color:var(--muted)}
-.mchip.long.selesai i{background:var(--muted)}
 .srow.selesai .dot{background:var(--faint)!important}
 .srow.selesai .stitle,.srow.selesai .stime{color:var(--faint)}
 .mchip.long{background:var(--cat);color:var(--on-cat)}
