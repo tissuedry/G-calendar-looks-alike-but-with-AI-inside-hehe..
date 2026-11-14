@@ -763,29 +763,37 @@ $('detOv').addEventListener('click',e=>{
   const b=e.target.closest('[data-det]');if(!b)return;
   const ev=events().find(x=>x.id===detailId);if(!ev)return;
   if(b.dataset.det==='edit'){$('detOv').hidden=true;detailId=null;$('detDel').innerHTML='';openForm(ev);return}
-  $('detDel').dataset.confirm='1';$('detDel').innerHTML=delMarkup(ev,true);
+  if(!needsChoice(ev)){handleDel($('detDel'),ev,'one',closeDetail);return} // plain event: delete right away
+  $('detDel').dataset.confirm='1';$('detDel').innerHTML=delMarkup(ev,true); // series / repeating group: pick this one or all
 });
 
 /* ---------- delete (shared by detail + form) ---------- */
-function delMarkup(ev,confirming){
-  const grp=ev.groupId&&events().filter(x=>x.groupId===ev.groupId).length>1;
-  const span=ev.dayN||(isSpan(ev)?Math.round((parse(ev.endDate)-parse(ev.date))/864e5)+1:0);
-  if(confirming&&span)return `<span>${T('Hapus seluruh kegiatan ({n} hari)?',{n:span})}</span><button type="button" class="btn small danger" data-del="one">${T('Ya, hapus')}</button><button type="button" class="btn small text" data-del="no">${T('Tidak')}</button>`;
-  if(confirming&&ev.seriesId)return `<span>${T('Hapus kegiatan ini?')}</span><button type="button" class="btn small danger" data-del="one">${T('Hanya tanggal ini')}</button><button type="button" class="btn small danger" data-del="all">${T('Seluruh seri')}</button><button type="button" class="btn small text" data-del="no">${T('Tidak')}</button>`;
-  return confirming
-    ?`<span>${T('Hapus kegiatan ini?')}</span><button type="button" class="btn small danger" data-del="one">${T('Ya, hapus')}</button>${grp?`<button type="button" class="btn small danger" data-del="all">${T('Hapus semua berulang')}</button>`:''}<button type="button" class="btn small text" data-del="no">${T('Tidak')}</button>`
-    :`<button type="button" class="btn danger" data-del="ask">${T('Hapus')}</button>`;
+// No "are you sure?" step: deleting happens at once and the toast offers "Urungkan". Only a series / repeating group
+// needs a choice (this one or all), shown as buttons right away.
+const needsChoice=ev=>!!ev.seriesId||(!!ev.groupId&&events().filter(x=>x.groupId===ev.groupId).length>1);
+function delMarkup(ev,choiceOnly){
+  const grp=!ev.seriesId&&needsChoice(ev);
+  if(ev.seriesId)return `<button type="button" class="btn small danger" data-del="one">${T('Hanya tanggal ini')}</button><button type="button" class="btn small danger" data-del="all">${T('Seluruh seri')}</button>${choiceOnly?`<button type="button" class="btn small text" data-del="no">${T('Tidak')}</button>`:''}`;
+  if(grp)return `<button type="button" class="btn small danger" data-del="one">${T('Hanya kegiatan ini')}</button><button type="button" class="btn small danger" data-del="all">${T('Hapus semua berulang')}</button>${choiceOnly?`<button type="button" class="btn small text" data-del="no">${T('Tidak')}</button>`:''}`;
+  return `<button type="button" class="btn danger" data-del="one">${T('Hapus')}</button>`;
 }
 async function handleDel(zone,ev,action,done){
-  if(action==='ask'){zone.innerHTML=delMarkup(ev,true);return}
   if(action==='no'){zone.innerHTML=zone===$('detDel')?'':delMarkup(ev,false);delete zone.dataset.confirm;return}
-  if(ev.seriesId&&action==='one'){ // drop just this date from the series
-    const s=rawEv(ev.seriesId);
-    try{await saveMany([{...s,repeat:{...s.repeat,skip:[...(s.repeat.skip||[]),ev.date]}}]);done();toast(T('Dihapus'))}catch(err){toast(T('Gagal menghapus. {m}',{m:err.message}))}
-    return;
-  }
-  const ids=ev.seriesId?[ev.seriesId]:ev.spanId?[ev.spanId]:action==='all'?events().filter(x=>x.groupId===ev.groupId).map(x=>x.id):[ev.id];
-  try{await removeMany(ids);done();toast(ids.length>1?T('{n} kegiatan dihapus',{n:ids.length}):T('Dihapus'))}catch(err){toast(T('Gagal menghapus. {m}',{m:err.message}))}
+  let back; // what to put back on "Urungkan"
+  try{
+    if(ev.seriesId&&action==='one'){ // drop just this date from the series
+      const s=rawEv(ev.seriesId);back=[s];
+      await saveMany([{...s,repeat:{...s.repeat,skip:[...(s.repeat.skip||[]),ev.date]}}]);
+    }else{
+      const ids=ev.seriesId?[ev.seriesId]:ev.spanId?[ev.spanId]:action==='all'?events().filter(x=>x.groupId===ev.groupId).map(x=>x.id):[ev.id];
+      back=ids.map(rawEv).filter(Boolean);
+      await removeMany(ids);
+    }
+  }catch(err){toast(T('Gagal menghapus. {m}',{m:err.message}));return}
+  done();
+  toast(back.length>1?T('{n} kegiatan dihapus',{n:back.length}):T('Dihapus'),async()=>{
+    try{await saveMany(back);toast(T('Dikembalikan'))}catch(err){toast(T('Gagal mengurungkan. {m}',{m:err.message}))}
+  });
 }
 $('delZone').addEventListener('click',e=>{const b=e.target.closest('[data-del]');if(b&&editing)handleDel($('delZone'),editing,b.dataset.del,closeForm)});
 $('detDel').addEventListener('click',e=>{
@@ -1691,8 +1699,6 @@ document.body.addEventListener('click',e=>{
   if(op){showDetail(op.dataset.open);return}
   const st=e.target.closest('[data-status]');
   if(st){
-    const ev=events().find(x=>x.id===st.dataset.id);
-    if(st.dataset.status==='batal'&&ev&&ev.status!=='batal'&&!confirm(T('Batalkan kegiatan "{t}"?',{t:ev.title})))return;
     setStatus(st.dataset.id,st.dataset.status);return;
   }
   const gd=e.target.closest('[data-goday]');
@@ -1788,7 +1794,15 @@ function setLanguage(l){
 }
 document.querySelectorAll('[data-lang]').forEach(b=>b.addEventListener('click',()=>setLanguage(b.dataset.lang)));
 
-let tt;function toast(m){const t=$('toast');t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3200)}
+let tt;
+function toast(m,undo){ // undo = optional function: shows an "Urungkan" button
+  const t=$('toast');t.textContent=m;
+  if(undo){
+    const b=document.createElement('button');b.type='button';b.className='toast-act';b.textContent=T('Urungkan');
+    b.onclick=()=>{t.hidden=true;clearTimeout(tt);undo()};t.append(b);
+  }
+  t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,undo?7000:3200);
+}
 
 const hashView=location.hash.slice(1),savedView=store.get('agenda-saya-view');
 view=VIEWS[hashView]?hashView:VIEWS[savedView]?savedView:'summary';

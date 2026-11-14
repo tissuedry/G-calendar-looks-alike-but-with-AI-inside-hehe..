@@ -70,6 +70,8 @@ const EN = {
   "semua sudah ditandai": "all marked",
   "Belum ada yang jatuh tempo": "Nothing due yet",
   "Lihat detail": "View details",
+  "Dikembalikan": "Restored",
+  "Hanya kegiatan ini": "Only this event",
   "Warna": "Colour",
   "Kegiatan beberapa hari tidak bisa dibuat berulang.": "A multi-day event cannot repeat.",
   "Usulan AI, belum diterapkan": "AI proposal, not applied yet",

@@ -468,6 +468,8 @@ label.f,.f{display:grid;gap:5px;font-size:.8rem;color:var(--muted);font-weight:5
 .login-card input:focus{outline:0;border:2px solid var(--accent);padding:12px 13px}
 .login-card .btn{justify-self:end}
 
+.toast-act{margin-left:14px;border:0;background:none;color:#8ab4f8;font:inherit;font-weight:500;cursor:pointer;padding:0}
+.toast-act:hover{text-decoration:underline}
 .toast{position:fixed;left:24px;bottom:calc(24px + env(safe-area-inset-bottom,0px));background:#303030;color:#f2f2f2;padding:14px 18px;border-radius:6px;font-size:.88rem;z-index:50;box-shadow:var(--shadow-2);max-width:calc(100% - 48px)}
 .fab{display:none;position:fixed;right:max(20px,env(safe-area-inset-right,0px));bottom:calc(20px + env(safe-area-inset-bottom,0px));width:56px;height:56px;border-radius:16px;border:0;background:var(--accent-soft);color:var(--accent-ink);box-shadow:var(--shadow-2);z-index:12;place-items:center}
 .fab .ms{font-size:28px}
