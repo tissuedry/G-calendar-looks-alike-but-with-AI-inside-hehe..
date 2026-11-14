@@ -177,7 +177,7 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 .tev .tm{opacity:.92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tev.short{flex-direction:row;gap:4px;align-items:center;padding-block:0}
 .tev.tall .tt{white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
-.tev.selesai{opacity:.62}
+.tev.selesai{opacity:.62;filter:grayscale(1)}
 .tev.batal{opacity:.5}
 .tev.batal .tt{text-decoration:line-through}
 .tev.tunda{background:repeating-linear-gradient(135deg,var(--cat) 0 8px,color-mix(in srgb,var(--cat) 80%,var(--surface)) 8px 16px)}
@@ -200,7 +200,14 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 .mchip .mt{color:var(--muted);flex:none}
 .mchip .mtt{overflow:hidden;text-overflow:ellipsis}
 .mchip.batal .mtt{text-decoration:line-through;color:var(--faint)}
-.mchip.selesai .mtt{color:var(--muted)}
+/* done = history: greyed out in every view, whatever the date */
+.mchip.selesai{opacity:.6}
+.mchip.selesai .mtt,.mchip.selesai .mt{color:var(--faint)}
+.mchip.selesai i{background:var(--faint)}
+.mchip.long.selesai{background:color-mix(in srgb,var(--faint) 28%,var(--surface));color:var(--muted)}
+.mchip.long.selesai i{background:var(--muted)}
+.srow.selesai .dot{background:var(--faint)!important}
+.srow.selesai .stitle,.srow.selesai .stime{color:var(--faint)}
 .mchip.long{background:var(--cat);color:var(--on-cat)}
 .mchip.long.light{color:var(--on-cat-light)}
 .mchip.long .mt{color:inherit;opacity:.9}
@@ -424,7 +431,7 @@ label.f,.f{display:grid;gap:5px;font-size:.8rem;color:var(--muted);font-weight:5
 .tg-allcell{border-left:1px solid var(--line);padding:3px 2px;display:flex;flex-direction:column;gap:2px;min-width:0}
 .tallev{border:0;border-radius:5px;padding:2px 6px;text-align:left;font-size:.72rem;line-height:1.35;background:var(--cat);color:var(--on-cat);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tallev.light{color:var(--on-cat-light)}
-.tallev.selesai{opacity:.62}.tallev.batal{opacity:.5;text-decoration:line-through}
+.tallev.selesai{opacity:.62;filter:grayscale(1)}.tallev.batal{opacity:.5;text-decoration:line-through}
 .tev.deadline{border-left:3px solid var(--on-cat);border-radius:2px 6px 6px 2px}
 .dowpick{display:flex;flex-wrap:wrap;gap:6px}
 .dowpick label{position:relative}
