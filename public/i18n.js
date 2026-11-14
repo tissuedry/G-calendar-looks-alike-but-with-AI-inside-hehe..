@@ -69,6 +69,7 @@ const EN = {
   "{n} belum ditandai": "{n} not marked yet",
   "semua sudah ditandai": "all marked",
   "Belum ada yang jatuh tempo": "Nothing due yet",
+  "Lihat detail": "View details",
   "Sampai tanggal (kegiatan beberapa hari)": "Until date (multi-day event)",
   "Jam mulai berlaku di hari pertama dan jam selesai di hari terakhir. Hari-hari di antaranya tanpa jam.": "The start time applies to the first day and the end time to the last day. The days in between have no time.",
   "{n} hari": "{n} day|{n} days",

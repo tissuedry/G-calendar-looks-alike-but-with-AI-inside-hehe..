@@ -690,6 +690,9 @@ button{touch-action:manipulation}
 .aop.ubah{background:var(--accent-soft);color:var(--accent-ink)}
 .aop.hapus{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
 .atitle{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.alink{background:none;border:0;padding:0;font:inherit;font-weight:500;color:var(--accent-ink);text-align:left;cursor:pointer;min-width:0}
+.alink:hover{text-decoration:underline}
+.alink-i{font-size:18px;color:var(--faint);flex:none;margin-left:-4px}
 .adet{font-size:.82rem;color:var(--muted);overflow-wrap:anywhere}
 .adet.bad{color:var(--bad)}
 .adet .alab{color:var(--faint);margin-right:6px}

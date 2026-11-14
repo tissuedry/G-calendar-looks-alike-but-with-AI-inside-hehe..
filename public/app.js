@@ -1300,7 +1300,19 @@ function rescueActions(text){
   rest=rest.replace(/\n\s*[-–—_*]{3,}\s*\n[^\n.]{0,60}\s*$/,'').replace(/\n\s*[-–—_*]{3,}\s*$/,'').trim();
   return {acts,rest};
 }
+// id of the calendar entry a proposal card points at, or '' when it is not in the calendar (not added yet, or deleted)
+function aiTarget(p){
+  if(p.catOp||p.status==='invalid'||p.status==='working')return '';
+  let id=p.id;
+  if(p.op==='tambah'){if(p.status!=='applied'||!p.next)return '';id=p.next.id}
+  else if(p.op==='hapus'&&p.status==='applied')return '';
+  const raw=id&&rawEv(id);if(!raw)return '';
+  const d=p.skipDate||(p.op==='tambah'?p.next.date:p.before?.date)||raw.date;
+  const evs=events();
+  return [id,id+'@'+d,id+'@'+raw.date].find(x=>evs.some(e=>e.id===x))||'';
+}
 function proposalHtml(p,ti){
+  const tid=aiTarget(p);
   const a=(act,label,cls)=>`<button type="button" class="btn small ${cls}" data-aact="${act}" data-aturn="${ti}" data-akey="${p.key}"${p.status==='working'?' disabled':''}>${label}</button>`;
   let body='';
   if(p.status==='invalid')body=`<div class="adet bad">${esc(msgOf(p.error))}</div>`;
@@ -1327,7 +1339,7 @@ function proposalHtml(p,ti){
   else if(p.status==='working')acts=`<span class="astate">${T('Menerapkan…')}</span>`;
   else if(p.status==='applied')acts=`<span class="astate ok">${T('Diterapkan')}</span>`+a('undo',T('Urungkan'),'text');
   else if(p.status==='rejected')acts=`<span class="astate">${T('Ditolak')}</span>`;
-  return `<div class="acard ${p.status}"><div class="ahead"><span class="aop ${p.op}">${OP_LABEL[p.op]}</span><b class="atitle">${esc(p.title||T('(tanpa judul)'))}</b></div>${body}${warn}${p.reason&&p.status!=='invalid'?`<div class="areason">${esc(p.reason)}</div>`:''}${acts?`<div class="aacts">${acts}</div>`:''}</div>`;
+  return `<div class="acard ${p.status}"><div class="ahead"><span class="aop ${p.op}">${OP_LABEL[p.op]}</span>${tid?`<button type="button" class="atitle alink" data-open="${esc(tid)}" title="${T('Lihat detail')}">${esc(p.title||T('(tanpa judul)'))}</button><span class="ms alink-i" aria-hidden="true">chevron_right</span>`:`<b class="atitle">${esc(p.title||T('(tanpa judul)'))}</b>`}</div>${body}${warn}${p.reason&&p.status!=='invalid'?`<div class="areason">${esc(p.reason)}</div>`:''}${acts?`<div class="aacts">${acts}</div>`:''}</div>`;
 }
 function proposalsHtml(t,ti){
   const pend=t.proposals.filter(p=>p.status==='pending');
