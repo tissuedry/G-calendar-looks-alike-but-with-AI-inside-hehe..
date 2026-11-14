@@ -734,7 +734,7 @@ const linkify=s=>esc(s).replace(/\bhttps?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g,u=>`<a 
 function openDetail(id){
   const e=events().find(x=>x.id===id);
   if(!e){closeDetail();return}
-  detailId=id;
+  detailId=id;$('detOv').classList.remove('preview');
   const grp=e.groupId?events().filter(x=>x.groupId===e.groupId).length:0;
   const sp=e.spanId?rawEv(e.spanId):null; // a multi-day event: show the whole range, not just the day that was clicked
   const when=sp?`${fDayShort.format(parse(sp.date))}${sp.start?' '+sp.start:''} → ${fDayShort.format(parse(sp.endDate))}${sp.end?' '+sp.end:''} · ${T('{n} hari',{n:e.dayN})}`
@@ -751,7 +751,7 @@ function openDetail(id){
   $('detOv').hidden=false;
 }
 function closeDetail(){
-  $('detOv').hidden=true;detailId=null;$('detDel').innerHTML='';delete $('detDel').dataset.confirm;
+  $('detOv').hidden=true;$('detOv').classList.remove('preview');detailId=null;$('detDel').innerHTML='';delete $('detDel').dataset.confirm;
   if(returnDay){const d=returnDay;returnDay=null;openDay(d)}
 }
 function showDetail(id){
@@ -1311,8 +1311,27 @@ function aiTarget(p){
   const evs=events();
   return [id,id+'@'+d,id+'@'+raw.date].find(x=>evs.some(e=>e.id===x))||'';
 }
+// the event a proposal is about: the proposed result for add/change, the current one for delete
+const aiPrevEv=p=>p.catOp||p.status==='invalid'?null:(p.op==='hapus'?p.before:p.next)||p.before||null;
+// read-only detail of a proposal that is not (or no longer) in the calendar
+function openPreview(p){
+  const e=aiPrevEv(p);if(!e)return;
+  const last=e.endDate&&e.endDate>e.date;
+  const when=`${fDayShort.format(parse(e.date))}${e.start&&e.end?` · ${e.start} – ${e.end}`:' · '+timeText(e)}${last?` → ${fDayShort.format(parse(e.endDate))}`:''}`;
+  const warn=(p.warn||[]).map(w=>`<div class="det-row"><span class="ms">warning</span><span>${esc(msgOf(w))}</span></div>`).join('');
+  detailId=null;delete $('detDel').dataset.confirm;$('detDel').innerHTML='';
+  $('detOv').classList.add('preview');
+  $('detBody').innerHTML=`
+    <div class="det-row" style="${catStyle(e.cat)}"><span class="det-sw"></span><div><h2 id="detTitle" class="${p.op==='hapus'?'strike':''}">${esc(e.title||p.title||T('(tanpa judul)'))}</h2><div class="det-when">${when}</div></div></div>
+    <div class="det-row"><span class="ms">auto_awesome</span><span><b>${OP_LABEL[p.op]}</b> · ${esc(({pending:T('Usulan AI, belum diterapkan'),clash:T('Ditahan karena bentrok'),applied:T('Diterapkan'),rejected:T('Ditolak')})[p.status]||'')}</span></div>
+    <div class="det-row"><span class="ms">sell</span><span>${esc(catLabel(e.cat))}</span></div>
+    ${e.repeat?`<div class="det-row"><span class="ms">event_repeat</span><span>${T('Berulang')}: ${esc(ruleText(e.repeat,e.date))}</span></div>`:''}
+    ${e.notes?`<div class="det-row"><span class="ms">notes</span><div class="det-notes">${linkify(e.notes)}</div></div>`:''}
+    ${p.reason?`<div class="det-row"><span class="ms">info</span><span>${esc(p.reason)}</span></div>`:''}${warn}`;
+  $('detOv').hidden=false;
+}
 function proposalHtml(p,ti){
-  const tid=aiTarget(p);
+  const tid=aiTarget(p),prev=!tid&&aiPrevEv(p);
   const a=(act,label,cls)=>`<button type="button" class="btn small ${cls}" data-aact="${act}" data-aturn="${ti}" data-akey="${p.key}"${p.status==='working'?' disabled':''}>${label}</button>`;
   let body='';
   if(p.status==='invalid')body=`<div class="adet bad">${esc(msgOf(p.error))}</div>`;
@@ -1339,7 +1358,7 @@ function proposalHtml(p,ti){
   else if(p.status==='working')acts=`<span class="astate">${T('Menerapkan…')}</span>`;
   else if(p.status==='applied')acts=`<span class="astate ok">${T('Diterapkan')}</span>`+a('undo',T('Urungkan'),'text');
   else if(p.status==='rejected')acts=`<span class="astate">${T('Ditolak')}</span>`;
-  return `<div class="acard ${p.status}"><div class="ahead"><span class="aop ${p.op}">${OP_LABEL[p.op]}</span>${tid?`<button type="button" class="atitle alink" data-open="${esc(tid)}" title="${T('Lihat detail')}">${esc(p.title||T('(tanpa judul)'))}</button><span class="ms alink-i" aria-hidden="true">chevron_right</span>`:`<b class="atitle">${esc(p.title||T('(tanpa judul)'))}</b>`}</div>${body}${warn}${p.reason&&p.status!=='invalid'?`<div class="areason">${esc(p.reason)}</div>`:''}${acts?`<div class="aacts">${acts}</div>`:''}</div>`;
+  return `<div class="acard ${p.status}"><div class="ahead"><span class="aop ${p.op}">${OP_LABEL[p.op]}</span>${tid||prev?`<button type="button" class="atitle alink" ${tid?`data-open="${esc(tid)}"`:`data-aprev="${ti}:${p.key}"`} title="${T('Lihat detail')}">${esc(p.title||T('(tanpa judul)'))}</button><span class="ms alink-i" aria-hidden="true">chevron_right</span>`:`<b class="atitle">${esc(p.title||T('(tanpa judul)'))}</b>`}</div>${body}${warn}${p.reason&&p.status!=='invalid'?`<div class="areason">${esc(p.reason)}</div>`:''}${acts?`<div class="aacts">${acts}</div>`:''}</div>`;
 }
 function proposalsHtml(t,ti){
   const pend=t.proposals.filter(p=>p.status==='pending');
@@ -1606,6 +1625,8 @@ $('aiPanel').addEventListener('dragover',e=>{if([...(e.dataTransfer?.types||[])]
 $('aiPanel').addEventListener('drop',e=>{if(e.dataTransfer?.files?.length){e.preventDefault();addPics(e.dataTransfer.files)}});
 $('aiPanel').addEventListener('click',e=>{
   const b=e.target.closest('[data-chip]');if(b){askAI(T(AI_CHIPS[+b.dataset.chip].p),{tools:false});return}
+  const pv=e.target.closest('[data-aprev]');
+  if(pv){const[ti,key]=pv.dataset.aprev.split(':'),p=aiTurns[+ti]?.proposals?.find(x=>x.key===key);if(p)openPreview(p);return}
   const ab=e.target.closest('[data-aact]');if(!ab)return;
   if(ab.dataset.aact==='copy-img'){copyImage(aiTurns[+ab.dataset.aturn]);return}
   const turn=aiTurns[+ab.dataset.aturn];if(!turn?.proposals)return;
