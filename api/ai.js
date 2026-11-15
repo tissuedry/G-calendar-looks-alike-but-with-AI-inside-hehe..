@@ -29,7 +29,7 @@ export default route(['GET', 'POST'], async (req, res) => {
   requireAuth(req);
   if (req.method === 'GET') return send(res, 200, { providers: listProviders(), default: defaultProvider() });
 
-  const { system, messages, provider: pref, lang, tools, images } = await readJson(req);
+  const { system, messages, provider: pref, lang, tools, images, force } = await readJson(req);
   const note = NOTE[lang === 'en' ? 'en' : 'id'];
   if (typeof system !== 'string' || !Array.isArray(messages) || !messages.length) throw new HttpError(400, 'Permintaan tidak valid');
   const turns = messages.slice(-MAX_TURNS)
@@ -52,7 +52,8 @@ export default route(['GET', 'POST'], async (req, res) => {
   const msgs = [{ role: 'system', content: system.slice(0, MAX_SYSTEM) }, ...turns];
   const provider = typeof pref === 'string' ? pref : undefined;
   // the browser leaves the schedule tool out for ordinary questions (tools === false)
-  const first = await openStream(msgs, ctl.signal, provider, tools !== false, pics.length > 0);
+  // force = the browser saw a clear request but the model only wrote text last time: make it call the tool
+  const first = await openStream(msgs, ctl.signal, provider, tools !== false, pics.length > 0, undefined, force === true && tools !== false);
   if (first.error) return send(res, first.error.status, { error: first.error.message, code: first.error.code });
 
   // headers go out with the first write. The answer can come from a retry, so they are set lazily.
