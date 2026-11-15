@@ -438,7 +438,7 @@ function renderDashboard(){
     :`<li class="empty">${T('Semua kegiatan yang lewat sudah ditandai.')}</li>`;
 
   const t0=midnight(now);
-  $('upList').innerHTML=upcoming.length?upcoming.slice(0,8).map(e=>{
+  $('upList').innerHTML=upcoming.length?upcoming.slice(0,60).map(e=>{
     const d=parse(e.date),days=Math.round((d-t0)/864e5);
     let c=days===1?T('Besok'):T('{n} hari lagi',{n:days});
     if(days===0){const m=upM(e)-nowM;c=!e.start&&!e.end?T('Hari ini'):m<60?T('{n} menit lagi',{n:m}):T('{n} jam lagi',{n:Math.floor(m/60)})}
