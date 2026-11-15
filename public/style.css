@@ -302,7 +302,8 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 .att .late,.stat .late{font-weight:500;color:#e8685f}
 .badge-late{display:inline-block;min-width:20px;padding:0 7px;margin-left:6px;border-radius:10px;background:#e8685f;color:#fff;font-size:12px;font-weight:600;line-height:20px;text-align:center;vertical-align:2px}
 .badge-late:empty{display:none}
-.up{list-style:none;margin:0;padding:0}
+.up{list-style:none;margin:0;padding:0;max-height:min(420px,60vh);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.att{max-height:min(320px,50vh);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
 .up li{display:grid;grid-template-columns:48px 1fr auto;gap:14px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
 .up li:first-child{border-top:0}
 .datebox{text-align:center;line-height:1.1}
