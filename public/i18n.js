@@ -70,6 +70,7 @@ const EN = {
   "semua sudah ditandai": "all marked",
   "Belum ada yang jatuh tempo": "Nothing due yet",
   "Lihat detail": "View details",
+  "AI sedang menyiapkan tema…": "The AI is preparing the theme…",
   "Hari ini ulang tahunmu": "Today is your birthday",
   "ke-{n}": "#{n}",
   "Diganti dengan usulan yang baru": "Replaced by a newer proposal",

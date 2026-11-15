@@ -132,7 +132,6 @@ function applyState(s){
   real=Array.isArray(s.events)?s.events:[];
   if(Array.isArray(s.cats))cats=s.cats;
   backend='api';loaded=true;loadErr=null;render();
-  if(typeof bdayStart==='function')bdayStart(); // birthday theme (public/birthday.js); runs once
 }
 async function loadRemote(){applyState(await api('state'))}
 // (re)loads from the server. A failure shows an error banner with a retry button, never an endless "loading".
@@ -1837,6 +1836,8 @@ if(!store.get('agenda-cal-view')&&matchMedia('(max-width:640px)').matches)lastCa
 I18N.applyDom();applyLangUI();renderShortcuts();
 setView(view);
 if(store.get('agenda-ai')==='1'&&!mqMobile.matches)setAI(true);
+// birthday banner (public/birthday.js, loaded after this file): static, shown as soon as the page is ready, does not wait for the schedule
+document.addEventListener('DOMContentLoaded',()=>{if(typeof bdayStart==='function')bdayStart({T,esc})});
 initStore();
 setInterval(()=>{if(loaded&&!anyOverlay()&&!aiBusy)render()},60000);
 })();
