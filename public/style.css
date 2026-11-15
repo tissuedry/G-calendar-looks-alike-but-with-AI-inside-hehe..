@@ -727,3 +727,21 @@ button{touch-action:manipulation}
   #langTop{display:none}
   .side-lang{display:flex}
 }
+
+/* ---- birthday theme (public/birthday.js): colours come from one hue (--bh) chosen by the AI ---- */
+:root[data-bday]{--accent:hsl(var(--bh) 70% 33%);--accent-soft:hsl(var(--bh) 85% 91%);--accent-ink:hsl(var(--bh) 80% 14%);--on-accent:#fff}
+@media (prefers-color-scheme:dark){:root[data-bday]:not([data-theme="light"]){--accent:hsl(var(--bh) 85% 78%);--accent-soft:hsl(var(--bh) 55% 24%);--accent-ink:hsl(var(--bh) 90% 90%);--on-accent:hsl(var(--bh) 60% 14%)}}
+:root[data-bday][data-theme="dark"]{--accent:hsl(var(--bh) 85% 78%);--accent-soft:hsl(var(--bh) 55% 24%);--accent-ink:hsl(var(--bh) 90% 90%);--on-accent:hsl(var(--bh) 60% 14%)}
+.bday{display:flex;align-items:center;gap:14px;margin:0 0 14px;padding:12px 8px 12px 18px;border-radius:16px;background:linear-gradient(100deg,var(--accent-soft),color-mix(in srgb,var(--accent-soft) 40%,var(--surface)));color:var(--accent-ink);min-width:0}
+.bday[hidden]{display:none}
+.bday-emo{font-size:2rem;line-height:1;flex:none}
+.bday-tx{display:grid;gap:2px;min-width:0;flex:1}
+.bday-tx b{font-size:1.05rem;font-weight:500;overflow-wrap:anywhere}
+.bday-tx span{font-size:.9rem;overflow-wrap:anywhere}
+.bday-tx small{font-size:.76rem;opacity:.75;overflow-wrap:anywhere}
+.bday-row{display:flex;gap:6px;font-size:1.4rem;flex:none}
+.bday-row i{font-style:normal}
+@media (max-width:640px){.bday-row{display:none}.bday{padding-left:14px}}
+.bday-fx{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:30}
+.bday-fx span{position:absolute;top:-40px;opacity:0;animation:bdayfall linear forwards}
+@keyframes bdayfall{0%{transform:translateY(0) rotate(0);opacity:0}10%{opacity:1}100%{transform:translateY(110vh) rotate(320deg);opacity:.9}}

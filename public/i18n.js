@@ -70,6 +70,8 @@ const EN = {
   "semua sudah ditandai": "all marked",
   "Belum ada yang jatuh tempo": "Nothing due yet",
   "Lihat detail": "View details",
+  "Hari ini ulang tahunmu": "Today is your birthday",
+  "ke-{n}": "#{n}",
   "Diganti dengan usulan yang baru": "Replaced by a newer proposal",
   "Dikembalikan": "Restored",
   "Hanya kegiatan ini": "Only this event",
