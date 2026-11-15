@@ -7,8 +7,8 @@
 const BDAY = {
   enabled: true,      // false = fitur dimatikan
   name: '',           // nama untuk sapaan (boleh kosong), mis. 'Akbar'
-  month: 1, day: 29,  // ULANG TAHUN: tanggal 29, bulan 1 (Januari)
-  bornYear: 2026,     // tahun lahir, dipakai untuk umur ("ulang tahun ke-N"); isi null kalau tidak mau
+  month: 1, day: 15,  // ULANG TAHUN: tanggal 29, bulan 1 (Januari)
+  bornYear: 2005,     // tahun lahir, dipakai untuk umur ("ulang tahun ke-N"); isi null kalau tidak mau
   daysBefore: 0,      // berapa hari SEBELUM hari H tema sudah tampil
   daysAfter: 6,       // berapa hari SETELAH hari H; 0 sebelum + 6 sesudah = 7 hari (29 Jan sampai 4 Feb)
   // Tema khusus per tahun (opsional). Kosong = AI memilih sendiri. Contoh: 2027: 'karhutla'
