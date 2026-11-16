@@ -112,7 +112,7 @@ Salin [`.env.example`](.env.example) menjadi `.env`. File `.env` tidak ikut ke G
 | `AUTH_SECRET` | Disarankan | String acak panjang untuk menandatangani cookie sesi (`openssl rand -hex 32`). |
 | `AI_PROVIDER` | Tidak | `groq` (default) atau `gemini`. Pengguna bisa menggantinya lewat tombol di panel Asisten. |
 | `GROQ_API_KEY` | Salah satu AI | Dari [console.groq.com/keys](https://console.groq.com/keys). |
-| `GROQ_MODEL` | **Tidak perlu** | Opsional. Isi satu model (atau beberapa dipisah koma) hanya jika ingin model itu dicoba lebih dulu. Daftar bawaan di kode: `openai/gpt-oss-120b`, `openai/gpt-oss-20b`. |
+| `GROQ_MODEL` | **Tidak perlu** | Opsional. Isi satu model (atau beberapa dipisah koma) hanya jika ingin model itu dicoba lebih dulu. Daftar bawaan di kode: `qwen/qwen3.8-27b`, `openai/gpt-oss-120b`, `openai/gpt-oss-20b`. |
 | `GEMINI_API_KEY` | Salah satu AI | Dari [aistudio.google.com/apikey](https://aistudio.google.com/apikey). |
 | `GEMINI_MODEL` | **Tidak perlu** | Opsional, sama seperti `GROQ_MODEL`. Daftar bawaan di kode: `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`, `gemini-3.5-flash`, `gemini-3.6-flash`. |
 | `PORT` | Tidak | Hanya untuk server lokal (default 3000). |
