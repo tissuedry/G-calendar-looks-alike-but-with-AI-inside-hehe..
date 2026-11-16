@@ -410,6 +410,7 @@ function renderDashboard(){
   const todayH=sum(todayEv.filter(active));
   $('todayMeta').textContent=todayH?T('{h} jam berdurasi',{h:fmtH(todayH)}):'';
   let nextMarked=false;
+  $('todayList').classList.toggle('scroll',todayEv.length>8);
   $('todayList').innerHTML=todayEv.length?todayEv.map(e=>{
     const en=eM(e),isNow=!!e.start&&mins(e.start)<=nowM&&nowM<en&&active(e)&&e.status!=='selesai';
     let flag='';
