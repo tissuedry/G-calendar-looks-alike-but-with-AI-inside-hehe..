@@ -411,7 +411,15 @@ function renderDashboard(){
   $('todayMeta').textContent=todayH?T('{h} jam berdurasi',{h:fmtH(todayH)}):'';
   let nextMarked=false;
   $('todayList').classList.toggle('scroll',todayEv.length>8);
-  $('todayList').innerHTML=todayEv.length?todayEv.map(e=>{
+  // Order by relevance right now: running, then coming up (soonest first), then untimed ones (flexible),
+  // then what is finished/cancelled/past at the bottom. Ties keep the normal chronological order.
+  const rank=e=>{
+    if(!active(e)||e.status==='selesai'||eM(e)<=nowM)return 3;
+    if(e.start&&mins(e.start)<=nowM)return 0;
+    return e.start?1:2;
+  };
+  const todaySorted=todayEv.map((e,i)=>({e,i,r:rank(e)})).sort((a,b)=>a.r-b.r||a.i-b.i).map(x=>x.e);
+  $('todayList').innerHTML=todayEv.length?todaySorted.map(e=>{
     const en=eM(e),isNow=!!e.start&&mins(e.start)<=nowM&&nowM<en&&active(e)&&e.status!=='selesai';
     let flag='';
     if(isNow)flag=`<span class="flag now">${T('Berlangsung')}</span>`;
@@ -1516,7 +1524,7 @@ function renderAI(){
 const AI_ERR_KEYS={no_key:'API key AI belum diatur di server. Isi GROQ_API_KEY atau GEMINI_API_KEY.',rate_limited:'Batas pemakaian gratis tercapai. Coba lagi beberapa saat lagi.',too_large:'Data jadwal terlalu besar untuk model ini. Coba pertanyaan yang lebih spesifik.',bad_key:'API key AI ditolak. Periksa kembali key-nya di pengaturan server.',unauthorized:'Sesi berakhir. Silakan masuk lagi.'};
 // Does the message ask to add / change / move / delete something (or paste a list to schedule)? Only then is the
 // schedule tool offered to the model; for ordinary questions it is left out so it cannot be misused.
-const CHANGE_RE=/\b(tambah\w*|bikin\w*|buatkan|buat\s+(?:jadwal|kegiatan|acara|rapat|agenda|event|pengingat)|jadwalkan|mana\s+(?:jadwal|usulan|kegiatan|agenda)\w*|ingat(?:kan|in)?|ingetin|jangan\s+lupa|remind\w*|reminder|masukkan|catat\w*|pindah\w*|geser\w*|ubah|ganti\w*|edit|hapus\w*|batalkan|undur\w*|majukan|atur(?:kan)?|add|create|schedule\s+(?:a|an|the|my|me)|book|move|reschedule|change|update|delete|remove|cancel|postpone|shift)\b/i;
+const CHANGE_RE=/\b(tambah\w*|bikin\w*|buatkan|buat\s+(?:jadwal|kegiatan|acara|rapat|agenda|event|pengingat)|jadwalkan|mana\s+(?:jadwal|usulan|kegiatan|agenda)\w*|ingat(?:kan|in)?|ingetin|jangan\s+lupa|remind\w*|reminder|masukkan|catat(?!an)\w*|pindah\w*|geser\w*|ubah|ganti\w*|edit|hapus\w*|batalkan|undur\w*|majukan|atur(?:kan)?|add|create|schedule\s+(?:a|an|the|my|me)|book|move|reschedule|change|update|delete|remove|cancel|postpone|shift)\b/i;
 // a statement that names a day ("besok kumpulkan laporan") is a change request even without a known verb; a question is not
 const QUESTION_RE=/\?\s*$|^\s*(apa|apakah|siapa|kapan|dimana|di mana|berapa|bagaimana|gimana|mengapa|kenapa|what|which|when|where|who|how|why|is there|are there|do i have)\b|\b(apa saja|hari apa|tanggal berapa|berapa)\b/i;
 const HAS_DATE_RE=/\b(besok|bsk|besoknya|esok|lusa|lsa|mgg\s+depan|hari ini|nanti|minggu depan|bulan depan|senin|selasa|rabu|kamis|jumat|jum'at|sabtu|tgl|tanggal\s*\d|\d{1,2}\s*(?:jan|feb|mar|apr|mei|jun|jul|agu|sep|okt|nov|des)\w*|tomorrow|today|next (?:week|month)|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i;
