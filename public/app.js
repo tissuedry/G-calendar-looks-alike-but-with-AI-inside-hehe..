@@ -1916,20 +1916,33 @@ function notifyTick(){
   let changed=false;
   for(const k of Object.keys(seen))if(!k.startsWith(today)){delete seen[k];changed=true} // forget earlier days
   // only events with a time: start time (event) or end time only (deadline); finished/cancelled ones are skipped
+  const due=[];
   events().filter(e=>e.date===today&&active(e)&&e.status!=='selesai'&&(e.start||e.end)).forEach(e=>{
     const at=mins(e.start||e.end);
     if(nowM<at-notifyLead||nowM>=at)return;
     const key=`${today}|${e.id}|${e.start||''}|${e.end||''}`;
     if(seen[key])return;
     seen[key]=1;changed=true;
-    const left=at-nowM,when=`${e.start||e.end}${e.start&&e.end?'–'+e.end:''}`;
-    const body=`${e.start?T('Mulai {n} menit lagi',{n:left}):T('Tenggat {n} menit lagi',{n:left})} · ${when} · ${catLabel(e.cat)}`;
-    try{
-      const n=new Notification(e.title,{body,icon:'icon-192.png',tag:key}); // same tag in two tabs = one notification
-      n.onclick=()=>{window.focus();n.close()};
-    }catch(err){toast(`${e.title}: ${body}`)}
+    due.push({e,at,key});
   });
   if(changed)store.set(NOTIFIED_KEY,JSON.stringify(seen));
+  if(!due.length)return;
+  due.sort((a,b)=>a.at-b.at||a.e.title.localeCompare(b.e.title));
+  const show=(title,body,tag)=>{
+    try{
+      const n=new Notification(title,{body,icon:'icon-192.png',tag}); // same tag in two tabs = one notification
+      n.onclick=()=>{window.focus();n.close()};
+    }catch(err){toast(`${title}: ${body}`)}
+  };
+  if(due.length===1){ // one event: its own notification
+    const {e,at,key}=due[0],left=at-nowM,when=`${e.start||e.end}${e.start&&e.end?'–'+e.end:''}`;
+    show(e.title,`${e.start?T('Mulai {n} menit lagi',{n:left}):T('Tenggat {n} menit lagi',{n:left})} · ${when} · ${catLabel(e.cat)}`,key);
+  }else{ // several events due at the same check: ONE notification listing them, instead of a pile
+    const line=({e})=>`${e.start||e.end} ${e.start?'':T('(tenggat)')+' '}${e.title}`.replace(/\s+/g,' ');
+    const shown=due.slice(0,4).map(line);
+    if(due.length>4)shown.push(T('+{n} lainnya',{n:due.length-4}));
+    show(T('{n} kegiatan segera dimulai',{n:due.length}),shown.join('\n'),`agenda-batch|${today}|${nowM}`);
+  }
 }
 renderNotify();
 setInterval(notifyTick,20000); // background tabs may run this only about once a minute; the lead-time window is wider than that
