@@ -93,6 +93,8 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 .menu button:hover,.menu button:focus-visible{background:var(--hover);outline:0}
 .menu button[aria-checked="true"]{background:var(--accent-soft);color:var(--accent-ink)}
 .menu kbd{background:none;color:var(--faint)}
+.menu .menu-note{padding:8px 16px 4px;max-width:240px;color:var(--faint);font-size:.8rem;line-height:1.4}
+.menu .menu-head{padding:4px 16px 8px;font-size:.8rem;color:var(--muted)}
 .ai-toggle{margin-left:4px}
 .ai-toggle .ms{color:var(--accent)}
 

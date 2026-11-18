@@ -1821,7 +1821,7 @@ window.addEventListener('focus',()=>{if(backend==='api'&&!anyOverlay())loadRemot
 
 /* ---------- language ---------- */
 // containers the app fills itself (already in the right language, and they hold user data): the static-DOM translator skips them
-I18N.skip='#tg,#monthGrid,#listOut,#hello,#stats,#todayList,#catBars,#attList,#upList,#weekLoad,#weekLegend,#weekRange,#repRange,#repBody,#todayMeta,#weekMeta,#dList,#dSum,#dTitle,#detBody,#detDel,#cmList,#aiLog,#aiChipRow,#aiProv,#aiModel,#mini,#catVis,#banner,#f-cats,#delZone,#viewMenu,#viewLabel,#periodTitle,#repPreview,#f-err,#loginErr,#toast,#shortcuts,#mTitle';
+I18N.skip='#notifMenu,#tg,#monthGrid,#listOut,#hello,#stats,#todayList,#catBars,#attList,#upList,#weekLoad,#weekLegend,#weekRange,#repRange,#repBody,#todayMeta,#weekMeta,#dList,#dSum,#dTitle,#detBody,#detDel,#cmList,#aiLog,#aiChipRow,#aiProv,#aiModel,#mini,#catVis,#banner,#f-cats,#delZone,#viewMenu,#viewLabel,#periodTitle,#repPreview,#f-err,#loginErr,#toast,#shortcuts,#mTitle';
 function renderShortcuts(){
   const k=(c,w)=>`<kbd>${c}</kbd> ${T(w)}`;
   $('shortcuts').innerHTML=`${T('Pintasan:')} ${[k('D','hari'),k('X','3 hari'),k('W','minggu'),k('M','bulan'),k('A','jadwal'),k('R','dashboard'),k('T','hari ini'),k('C','buat')].join(' · ')}`;
@@ -1832,7 +1832,7 @@ function applyLangUI(){
 function setLanguage(l){
   if(l===I18N.lang)return;
   I18N.setLang(l);store.set('agenda-lang',l);
-  setFormats();I18N.applyDom();applyLangUI();renderShortcuts();renderViewMenu();
+  setFormats();I18N.applyDom();applyLangUI();renderShortcuts();renderViewMenu();renderNotify();
   if(!$('formOv').hidden){ // keep an open form in the new language
     $('mTitle').textContent=editing?T('Ubah kegiatan'):T('Tambah kegiatan');
     const cur=document.querySelector('input[name=cat]:checked');renderCatPick(cur?cur.value:'');
@@ -1863,4 +1863,75 @@ if(store.get('agenda-ai')==='1'&&!mqMobile.matches)setAI(true);
 document.addEventListener('DOMContentLoaded',()=>{if(typeof bdayStart==='function')bdayStart({T,esc})});
 initStore();
 setInterval(()=>{if(loaded&&!anyOverlay()&&!aiBusy)render()},60000);
+
+/* ---------- reminders: system notifications while the calendar is open in any tab ---------- */
+// Works while the calendar tab is open anywhere (another tab, minimised window). It does not work once the tab is closed.
+const NOTIFY_KEY='agenda-notify',NOTIFIED_KEY='agenda-notified',NOTIFY_OPTS=[0,5,10,30]; // minutes before; 0 = off
+let notifyLead=(()=>{const v=Number(store.get(NOTIFY_KEY));return NOTIFY_OPTS.includes(v)?v:0})();
+const canNotify=()=>'Notification' in window;
+const notifyOn=()=>notifyLead>0&&canNotify()&&Notification.permission==='granted';
+function renderNotify(){
+  const on=notifyOn();
+  $('notifIco').textContent=on?'notifications_active':'notifications_off';
+  $('notifBtn').setAttribute('aria-pressed',on);
+  const tip=on?T('Pengingat: {n} menit sebelum',{n:notifyLead}):T('Pengingat mati');
+  $('notifBtn').title=tip;$('notifBtn').setAttribute('aria-label',tip);
+  const note=!canNotify()?T('Browser ini tidak mendukung notifikasi.'):Notification.permission==='denied'?T('Notifikasi diblokir browser. Izinkan lewat ikon gembok di address bar, lalu pilih lagi.'):T('Pengingat muncul selama tab kalender masih terbuka.');
+  $('notifMenu').innerHTML=`<div class="menu-head">${T('Ingatkan sebelum kegiatan mulai')}</div>`
+    +NOTIFY_OPTS.map(n=>`<button role="menuitemradio" aria-checked="${n===notifyLead}" data-lead="${n}"><span>${n?T('{n} menit sebelum',{n}):T('Mati')}</span></button>`).join('')
+    +`<div class="menu-note">${note}</div>`;
+}
+function toggleNotifyMenu(open){
+  const m=$('notifMenu'),show=open??m.hidden;
+  m.hidden=!show;$('notifBtn').setAttribute('aria-expanded',show);
+  if(show){renderNotify();(m.querySelector('[aria-checked="true"]')||m.querySelector('button'))?.focus()}
+}
+$('notifBtn').onclick=e=>{e.stopPropagation();toggleNotifyMenu()};
+document.addEventListener('click',e=>{if(!$('notifMenu').hidden&&!e.target.closest('.menuwrap'))toggleNotifyMenu(false)});
+$('notifMenu').addEventListener('keydown',e=>{
+  if(e.key==='Escape'){toggleNotifyMenu(false);$('notifBtn').focus();return}
+  if(e.key!=='ArrowDown'&&e.key!=='ArrowUp')return;
+  e.preventDefault();
+  const items=[...$('notifMenu').querySelectorAll('button')],i=items.indexOf(document.activeElement);
+  items[(i+(e.key==='ArrowDown'?1:-1)+items.length)%items.length].focus();
+});
+$('notifMenu').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-lead]');if(!b)return;
+  const n=Number(b.dataset.lead);
+  if(n>0){
+    if(!canNotify()){toast(T('Browser ini tidak mendukung notifikasi.'));return}
+    if(Notification.permission==='default'){try{await Notification.requestPermission()}catch(err){}}
+    if(Notification.permission!=='granted'){toast(T('Izin notifikasi ditolak.'));renderNotify();return}
+  }
+  notifyLead=n;store.set(NOTIFY_KEY,String(n));renderNotify();toggleNotifyMenu(false);
+  if(n>0){
+    toast(T('Pengingat aktif: {n} menit sebelum kegiatan.',{n}));
+    try{new Notification(T('Pengingat aktif'),{body:T('Kamu akan diingatkan {n} menit sebelum kegiatan dimulai.',{n}),icon:'icon-192.png',tag:'agenda-notify-on'})}catch(err){}
+  }else toast(T('Pengingat dimatikan.'));
+});
+function notifyTick(){
+  if(!loaded||!notifyOn())return;
+  const d=new Date(),today=ymd(d),nowM=d.getHours()*60+d.getMinutes();
+  let seen={};try{seen=JSON.parse(store.get(NOTIFIED_KEY)||'{}')}catch(err){}
+  let changed=false;
+  for(const k of Object.keys(seen))if(!k.startsWith(today)){delete seen[k];changed=true} // forget earlier days
+  // only events with a time: start time (event) or end time only (deadline); finished/cancelled ones are skipped
+  events().filter(e=>e.date===today&&active(e)&&e.status!=='selesai'&&(e.start||e.end)).forEach(e=>{
+    const at=mins(e.start||e.end);
+    if(nowM<at-notifyLead||nowM>=at)return;
+    const key=`${today}|${e.id}|${e.start||''}|${e.end||''}`;
+    if(seen[key])return;
+    seen[key]=1;changed=true;
+    const left=at-nowM,when=`${e.start||e.end}${e.start&&e.end?'–'+e.end:''}`;
+    const body=`${e.start?T('Mulai {n} menit lagi',{n:left}):T('Tenggat {n} menit lagi',{n:left})} · ${when} · ${catLabel(e.cat)}`;
+    try{
+      const n=new Notification(e.title,{body,icon:'icon-192.png',tag:key}); // same tag in two tabs = one notification
+      n.onclick=()=>{window.focus();n.close()};
+    }catch(err){toast(`${e.title}: ${body}`)}
+  });
+  if(changed)store.set(NOTIFIED_KEY,JSON.stringify(seen));
+}
+renderNotify();
+setInterval(notifyTick,20000); // background tabs may run this only about once a minute; the lead-time window is wider than that
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)notifyTick()});
 })();
