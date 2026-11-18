@@ -425,7 +425,7 @@ function renderDashboard(){
     if(isNow)flag=`<span class="flag now">${T('Berlangsung')}</span>`;
     else if(!nextMarked&&e.start&&mins(e.start)>nowM&&active(e)){nextMarked=true;flag=`<span class="flag next">${T('Berikutnya')}</span>`}
     const tcol=e.start?`${e.start}${e.end?`<span>${e.end}</span>`:''}`:e.end?`${T('Tenggat')}<span>${e.end}</span>`:T('Tanpa jam');
-    return `<li class="${isNow?'now':''} ${(en<=nowM||e.status==='selesai')?'done':''}"><div class="t num">${tcol}</div>${evButton(e,flag)}</li>`;
+    return `<li class="${isNow?'now':''} ${(e.status==='selesai'||e.status==='batal')?'done':en<=nowM?'past':''}"><div class="t num">${tcol}</div>${evButton(e,flag)}</li>`;
   }).join(''):`<li class="empty" style="display:block"><b>${T('Tidak ada kegiatan hari ini.')}</b><br>${T('Tambahkan dengan tombol Buat, atau minta Asisten AI.')}</li>`;
 
   document.querySelectorAll('#catRangeSeg button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.range===catRange));
