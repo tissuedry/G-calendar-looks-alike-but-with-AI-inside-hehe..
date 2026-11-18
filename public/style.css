@@ -270,7 +270,8 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 .tl .t{font-size:.85rem;color:var(--muted);padding-top:2px;line-height:1.3}
 .tl .t span{display:block;color:var(--faint);font-size:.78rem}
 .tl li.now{background:linear-gradient(90deg,var(--accent-soft),transparent 75%);margin-inline:-20px;padding-inline:20px}
-.tl li.done .title{color:var(--muted)}
+.tl li.done{opacity:.5;filter:grayscale(.85)}
+.tl li.done .title{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--faint)}
 .tl.scroll{max-height:616px;overflow-y:auto;overscroll-behavior:contain;margin-inline:-20px;padding-inline:20px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
 .tl.scroll::-webkit-scrollbar{width:6px}
 .tl.scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:6px}

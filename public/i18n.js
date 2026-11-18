@@ -177,7 +177,7 @@ const EN = {
   "Kelola": "Manage",
   "Belum ditandai": "Not marked yet",
   "Terlewat": "Overdue",
-  "Belum ditandai · 7 hari terakhir": "Not marked yet · last 7 days",
+  "Belum ditandai · bulan ini": "Not marked yet · this month",
   "Terlewat hari ini": "Passed today",
   "Telat {n} hari": "{n} day late|{n} days late",
   "7 hari terakhir": "Last 7 days",

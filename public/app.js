@@ -437,7 +437,7 @@ function renderDashboard(){
   $('catBars').innerHTML=ids.length?ids.map(id=>`<div class="catrow" style="${catStyle(id)}" title="${T('{p}% dari total',{p:Math.round(byCat[id]/tot*100)})}"><span class="catdot">${esc(catLabel(id))}</span><div class="track"><div class="fill" style="width:${byCat[id]/max*100}%"></div></div><span class="h num">${byCat[id]}</span></div>`).join('')
     :`<div class="empty">${catRange==='week'?T('Belum ada kegiatan minggu ini.'):T('Belum ada kegiatan bulan ini.')}</div>`;
 
-  const from=ymd(addDays(now,-7));
+  const from=ms<ymd(addDays(now,-7))?ms:ymd(addDays(now,-7)); // 7 days back, or the start of this month if that is earlier (matches the "belum ditandai" count)
   // unmarked past events (last 7 days) plus postponed ones, so every item counted as "belum ditandai" can be seen here
   const att=ev.filter(e=>!e.cont&&isPast(e)&&((e.status==='rencana'&&(e.endDate||e.date)>=from&&!e.seriesId)||e.status==='tunda')).sort(sortEv).reverse();
   const late=e=>{if(e.status==='tunda')return T('Ditunda');const d=Math.round((midnight(now)-parse(e.endDate||e.date))/864e5);return d<=0?T('Terlewat hari ini'):T('Telat {n} hari',{n:d})};
