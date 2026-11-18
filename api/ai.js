@@ -84,6 +84,18 @@ export default route(['GET', 'POST'], async (req, res) => {
         proposals = [];
       }
     }
+    // A weaker model sometimes drops the title or date of an "add". Ask once more, naming what was missing; keep the
+    // first answer if the retry is no better (the user still reviews everything before it is applied).
+    const incomplete = a => a.op === 'tambah' && (!a.judul || !a.tanggal);
+    if (actions.some(incomplete) && !ctl.signal.aborted) {
+      const fix = [...msgs, { role: 'user', content: '[Sistem] Usulan sebelumnya tidak lengkap. Untuk setiap "tambah", "judul" dan "tanggal" (YYYY-MM-DD) WAJIB diisi. Ulangi usulan untuk permintaan terakhir di atas dengan lengkap; jangan mengarang jam.' }];
+      const again = await openStream(fix, ctl.signal, provider, true, pics.length > 0, undefined, true);
+      if (again.response) {
+        const r2 = await pumpStream(again.response, () => {});
+        const a2 = r2.calls.filter(c => c.name === TOOL_NAME).flatMap(c => parseActions(c.args)).slice(0, MAX_ACTIONS);
+        if (a2.length && !a2.some(incomplete)) { actions = a2; source = again; finish = r2.finish; }
+      }
+    }
     if (actions.length) emit({ type: 'actions', actions });
     else if (proposals.length) emit({ type: 'text', text: `\n\n*(${note.unreadable})*` });
     // "length" with nothing written means the model spent its whole budget thinking; with some text it was really cut off
