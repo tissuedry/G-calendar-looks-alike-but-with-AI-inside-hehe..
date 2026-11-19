@@ -382,7 +382,7 @@ function renderDashboard(){
   const monthPast=monthEv.filter(e=>e.status==='selesai'||(isPast(e)&&!(e.seriesId&&e.status==='rencana'))), monthDone=monthPast.filter(e=>e.status==='selesai').length;
   const pct=monthPast.length?Math.round(monthDone/monthPast.length*100):0;
   const in14=ymd(addDays(now,14));
-  const upcoming=ev.filter(e=>active(e)&&!e.cont&&(e.date>today||(e.date===today&&upM(e)>nowM))&&e.date<=in14).sort(sortEv);
+  const upcoming=ev.filter(e=>active(e)&&e.status!=='selesai'&&!e.cont&&(e.date>today||(e.date===today&&upM(e)>nowM))&&e.date<=in14).sort(sortEv);
   const sum=l=>l.reduce((a,e)=>a+dur(e),0);
   const monthName=fMonthLong.format(now);
   const uEv=n=>T('kegiatan',{n});
