@@ -1555,7 +1555,20 @@ function proposalsHtml(t,ti){
   return `<div class="aprops"><div class="aprops-h">${T('Usulan perubahan · {n}',{n:t.proposals.length})}</div>${t.proposals.map(p=>proposalHtml(p,ti)).join('')}${foot}</div>`;
 }
 async function applyProposals(turn,keys){
-  const todo=turn.proposals.filter(p=>keys.includes(p.key)&&p.status==='pending');
+  let todo=turn.proposals.filter(p=>keys.includes(p.key)&&p.status==='pending');
+  if(!todo.length)return;
+  // delete / cancel / postpone proposals need a reason from the user (required), one dialog each.
+  // Dismissing the dialog leaves that proposal pending; the others still go through.
+  const AI_TAG=T('lewat Asisten AI');
+  for(const p of todo){
+    const st=p.patch?.status;
+    const asks=!p.catOp&&(p.op==='hapus'||(p.op==='ubah'&&(st==='batal'||st==='tunda')&&rawEv(p.id)?.status!==st));
+    if(!asks)continue;
+    const r=await askReason({title:p.op==='hapus'?T('Kenapa dihapus?'):st==='batal'?T('Kenapa dibatalkan?'):T('Kenapa ditunda?'),
+      sub:p.title||p.before?.title||'',chips:p.op==='hapus'?WHY_DELETE:st==='batal'?WHY_CANCEL:WHY_POSTPONE,required:true,ok:p.op==='hapus'?'Hapus':'Simpan'});
+    if(r)p.userWhy=`${r.why} (${AI_TAG})`;else p.skipAsk=true;
+  }
+  todo=todo.filter(p=>!p.skipAsk);
   if(!todo.length)return;
   todo.forEach(p=>p.status='working');renderAI();
   let fail=null;
@@ -1586,14 +1599,14 @@ async function applyProposals(turn,keys){
     const cur=rawEv(p.id); // re-read: the event may have changed since the proposal (a series exists only as its rule in real[])
     if(!cur){p.status='invalid';p.error={k:'Kegiatan ini sudah tidak ada di jadwal.'};continue}
     p.snapshot=cur;
-    if(p.op==='ubah'){ups.push({...cur,...p.patch});upP.push(p)}
+    if(p.op==='ubah'){ups.push({...cur,...p.patch,...(p.userWhy?{why:p.userWhy}:{})});upP.push(p)}
     else if(p.skipDate){ // delete one date of a series (kept in the history)
-      const occ=expandSeries(cur).find(o=>o.date===p.skipDate),tomb=occ&&tombFor(occ,T('Dihapus lewat Asisten AI'));
+      const occ=expandSeries(cur).find(o=>o.date===p.skipDate),tomb=occ&&tombFor(occ,p.userWhy||T('Dihapus lewat Asisten AI'));
       ups.push({...cur,repeat:{...cur.repeat,skip:[...(cur.repeat.skip||[]),p.skipDate]}});
       if(tomb){ups.push(tomb);p.tombId=tomb.id}
       upP.push(p);
     }
-    else{dels.push({...cur,del:delInfo(T('Dihapus lewat Asisten AI'))});delP.push(p)} // soft delete: goes to the history, can be restored
+    else{dels.push({...cur,del:delInfo(p.userWhy||T('Dihapus lewat Asisten AI'))});delP.push(p)} // soft delete: goes to the history, can be restored
   }
   if(ups.length&&!fail){try{await saveMany(ups);upP.forEach(p=>p.status='applied')}catch(e){fail=e}}
   if(dels.length&&!fail){try{await saveMany(dels);delP.forEach(p=>p.status='applied')}catch(e){fail=e}}

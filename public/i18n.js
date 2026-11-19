@@ -269,6 +269,7 @@ const EN = {
   "Salah input": "Entered by mistake",
   "Duplikat": "Duplicate",
   "Dihapus lewat Asisten AI": "Deleted via AI Assistant",
+  "lewat Asisten AI": "via AI Assistant",
   "Riwayat hapus": "Deleted history",
   "Cari judul, alasan, atau tanggal": "Search title, reason, or date",
   "Dihapus {t}": "Deleted {t}",
