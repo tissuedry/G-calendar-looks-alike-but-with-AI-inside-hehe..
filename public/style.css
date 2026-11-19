@@ -398,6 +398,7 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 /* ---------- overlays ---------- */
 .overlay{position:fixed;inset:0;z-index:20;background:var(--scrim);display:grid;place-items:center;padding:16px}
 .overlay.top2{z-index:25}
+.overlay.top3{z-index:30}
 .modal{background:var(--surface);border-radius:24px;box-shadow:var(--shadow-3);width:min(560px,100%);max-height:calc(100dvh - 32px);overflow:auto;padding:20px 24px 24px}
 .modal h2{font-weight:400;font-size:1.35rem;margin:0}
 .mhead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
@@ -764,3 +765,31 @@ button{touch-action:manipulation}
 .bday-fx{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:30}
 .bday-fx span{position:absolute;top:-40px;opacity:0;animation:bdayfall linear forwards}
 @keyframes bdayfall{0%{transform:translateY(0) rotate(0);opacity:0}10%{opacity:1}100%{transform:translateY(110vh) rotate(320deg);opacity:.9}}
+
+/* reason dialog + history of deleted events */
+.modal.why{width:min(440px,100%)}
+.modal.why .daysum{margin:4px 0 8px;overflow-wrap:anywhere}
+.whychips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}
+.whychip{border:1px solid var(--line-2);background:none;border-radius:999px;padding:5px 12px;font-size:.82rem;color:var(--ink);cursor:pointer}
+.whychip:hover{background:var(--accent-soft);color:var(--accent-ink)}
+.modal.why textarea{width:100%;min-height:64px;resize:vertical}
+.modal.why .f+.f{margin-top:10px}
+.modal.hist{width:min(640px,100%)}
+.hist-q{width:100%;margin:0 0 8px}
+.histlist{list-style:none;margin:0 0 8px;padding:0}
+.histlist li{display:grid;grid-template-columns:4px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.histlist li:first-child{border-top:0}
+.histlist .bar{align-self:stretch;border-radius:4px;background:var(--cat)}
+.histlist .hbody{display:grid;gap:2px;min-width:0}
+.histlist .title{font-weight:500;overflow-wrap:anywhere}
+.histlist .sub{color:var(--muted);font-size:.82rem;overflow-wrap:anywhere}
+.histlist .acts{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end}
+@media (max-width:520px){.histlist li{grid-template-columns:4px minmax(0,1fr)}.histlist .acts{grid-column:2;justify-content:flex-start}}
+.dday-del{border-top:1px solid var(--line);padding-top:8px;margin-bottom:12px}
+.dday-del h3{margin:0 0 4px;font-size:.85rem;font-weight:600;color:var(--muted)}
+.dday-del ul{list-style:none;margin:0;padding:0}
+.dday-del li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0}
+.dday-del .gt{display:grid;min-width:0}
+.dday-del .title{text-decoration:line-through;color:var(--muted);overflow-wrap:anywhere}
+.dday-del .sub{color:var(--faint);font-size:.8rem;overflow-wrap:anywhere}
+.det-why{color:var(--muted);font-size:.9rem;overflow-wrap:anywhere}

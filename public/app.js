@@ -84,7 +84,7 @@ function expandSeries(s){
     if(!ok)continue;
     const k=ymd(d);
     if(skip.has(k))continue;
-    out.push({...s,id:s.id+'@'+k,date:k,seriesId:s.id,status:(r.st&&r.st[k])||'rencana'});
+    out.push({...s,id:s.id+'@'+k,date:k,seriesId:s.id,status:(r.st&&r.st[k])||'rencana',why:(r.nt&&r.nt[k])||''});
   }
   return out;
 }
@@ -97,7 +97,9 @@ function expandSpan(s){
   for(let i=0;i<n;i++){const k=ymd(addDays(a,i));out.push({...s,id:i?s.id+'~'+k:s.id,date:k,spanId:s.id,cont:i>0,dayNo:i+1,dayN:n,endT:s.end,start:i?'':s.start,end:i===n-1?s.end:''})}
   return out;
 }
-function events(){return real.some(e=>e.repeat||e.endDate)?real.flatMap(e=>e.repeat?expandSeries(e):isSpan(e)?expandSpan(e):[e]):real}
+// deleted events (e.del) stay in real[] as history; every view works on the live ones only
+const live=()=>real.filter(e=>!e.del);
+function events(){const L=live();return L.some(e=>e.repeat||e.endDate)?L.flatMap(e=>e.repeat?expandSeries(e):isSpan(e)?expandSpan(e):[e]):L}
 const uniq=l=>{const seen=new Set();return l.filter(e=>{const k=e.spanId||e.id;return seen.has(k)?false:(seen.add(k),true)})};
 const dayTag=e=>e.dayN?`<span class="dtag">${e.dayNo}/${e.dayN}</span>`:'';
 // a multi-day event is over only after its LAST day (and that day's end time)
@@ -184,18 +186,65 @@ async function saveCats(next){
   if(backend!=='api')persistLocal();
   render();
 }
+/* Small dialog that asks for a reason (cancel / postpone / delete). Resolves {why,date} or null when dismissed.
+   Optional unless required; dateLabel adds an optional date field (the new date of a postponed event). */
+function askReason({title,sub='',chips=[],required=false,dateLabel='',ok='Simpan',minDate=''}){
+  return new Promise(resolve=>{
+    const ov=$('whyOv'),ta=$('whyText');
+    $('whyTitle').textContent=title;$('whySub').textContent=sub;$('whySub').hidden=!sub;
+    $('whyChips').innerHTML=chips.map(c=>`<button type="button" class="whychip" data-why="${esc(T(c))}">${esc(T(c))}</button>`).join('');
+    $('whyLbl').textContent=required?T('Alasan (wajib)'):T('Alasan (opsional)');
+    ta.value='';$('whyErr').hidden=true;
+    $('whyDateWrap').hidden=!dateLabel;$('whyDateLbl').textContent=dateLabel;$('whyDate').value='';$('whyDate').min=minDate;
+    $('whyOk').textContent=T(ok);$('whyNo').textContent=T('Batal');
+    ov.hidden=false;setTimeout(()=>ta.focus(),30);
+    const end=v=>{ov.hidden=true;ov.onclick=null;$('whyOk').onclick=null;$('whyNo').onclick=null;document.removeEventListener('keydown',key,true);resolve(v)};
+    const submit=()=>{
+      const why=ta.value.trim();
+      if(required&&!why){$('whyErr').textContent=T('Isi alasannya dulu, atau pilih salah satu di atas.');$('whyErr').hidden=false;ta.focus();return}
+      end({why,date:dateLabel?$('whyDate').value:''});
+    };
+    const key=e=>{
+      if(e.key==='Escape'){e.stopPropagation();e.preventDefault();end(null)}
+      else if(e.key==='Enter'&&e.target===ta&&!e.shiftKey){e.preventDefault();submit()}
+    };
+    document.addEventListener('keydown',key,true);
+    $('whyChips').onclick=e=>{const b=e.target.closest('[data-why]');if(b){ta.value=b.dataset.why;$('whyErr').hidden=true;ta.focus()}};
+    ov.onclick=e=>{if(e.target===ov)end(null)};
+    $('whyOk').onclick=submit;$('whyNo').onclick=()=>end(null);
+  });
+}
+const WHY_CANCEL=['Bentrok jadwal','Sakit','Tidak jadi','Belum siap'], WHY_POSTPONE=['Bentrok jadwal','Sakit','Belum siap','Menunggu kabar'], WHY_DELETE=['Salah input','Duplikat','Tidak jadi','Bentrok jadwal'];
 async function setStatus(id,status){
   const e=events().find(x=>x.id===id);if(!e||e.status===status)return;
-  // optimistic: show the new status at once, then save; roll back if the save fails
   const i=real.findIndex(x=>x.id===(e.seriesId||e.spanId||id));if(i<0)return;
-  const prev=real[i];let next;
-  if(e.seriesId){ // one occurrence of a series: remember the status for that date only
-    const st={...(prev.repeat.st||{})};
+  // cancelling / postponing asks why (optional); a postponed single event may also get its new date
+  let why='',newDate='';
+  if(status==='batal'||status==='tunda'){
+    const r=await askReason({title:status==='batal'?T('Kenapa dibatalkan?'):T('Kenapa ditunda?'),sub:e.title,chips:status==='batal'?WHY_CANCEL:WHY_POSTPONE,
+      dateLabel:status==='tunda'&&!e.seriesId?T('Ditunda sampai tanggal (opsional)'):'',minDate:e.endDate||e.date});
+    if(!r)return;
+    why=r.why;newDate=r.date;
+  }
+  // optimistic: show the new status at once, then save; roll back if the save fails
+  const prev=real[i];if(!prev)return;let next;
+  if(e.seriesId){ // one occurrence of a series: remember the status (and reason) for that date only
+    const st={...(prev.repeat.st||{})},nt={...(prev.repeat.nt||{})};
     if(status==='rencana')delete st[e.date];else st[e.date]=status;
-    next={...prev,repeat:{...prev.repeat,st}};
-  }else next={...prev,status};
+    if(why&&(status==='batal'||status==='tunda'))nt[e.date]=why;else delete nt[e.date];
+    next={...prev,repeat:{...prev.repeat,st,nt}};
+  }else{
+    next={...prev,status};
+    if(status==='batal'||status==='tunda')next.why=why;else if(!prev.movedFrom)delete next.why;
+    if(!next.why)delete next.why;
+    if(newDate&&newDate!==prev.date){ // postponed to a new date: the event moves there and is planned again, keeping a trace of where it came from
+      const delta=Math.round((parse(newDate)-parse(prev.date))/864e5);
+      next.date=newDate;next.status='rencana';next.movedFrom=prev.date;
+      if(prev.endDate)next.endDate=ymd(addDays(parse(prev.endDate),delta));
+    }
+  }
   real[i]=next;render();
-  try{await saveMany([next]);toast(T('Ditandai: {s}',{s:STATUS[status]}))}
+  try{await saveMany([next]);toast(next.movedFrom&&next.date===newDate&&newDate?T('Ditunda ke {d}',{d:fDayShort.format(parse(newDate))}):T('Ditandai: {s}',{s:STATUS[status]}))}
   catch(err){real[i]=prev;render();toast(T('Gagal menyimpan. {m}',{m:err.message}))}
 }
 
@@ -336,9 +385,60 @@ function openDay(s){
   $('dList').innerHTML=list.length?list.map(e=>`<li><span class="t num">${timeText(e)}</span>${evButton(e)}
     ${e.status==='selesai'?`<button class="btn text small" data-status="rencana" data-id="${esc(e.id)}">${T('Batalkan tanda')}</button>`:`<button class="btn tonal small" data-status="selesai" data-id="${esc(e.id)}">${T('Selesai')}</button>`}</li>`).join('')
     :`<li class="empty" style="display:block">${T('Belum ada kegiatan di tanggal ini.')}</li>`;
+  // what was deleted on this date stays visible here, so "why was I not reminded?" always has an answer
+  const gone=real.filter(e=>e.del&&e.date===s).sort((a,b)=>b.del.at-a.del.at);
+  $('dDel').hidden=!gone.length;
+  $('dDel').innerHTML=gone.length?`<h3>${T('Dihapus')} (${gone.length})</h3><ul>${gone.map(e=>`<li><span class="gt"><span class="title">${esc(e.title)}</span><span class="sub">${timeText(e)} · ${T('Dihapus {t}',{t:stamp(e.del.at)})}${e.del.why?' · '+esc(e.del.why):''}</span></span><button class="btn text small" data-hrestore="${esc(e.id)}">${T('Pulihkan')}</button></li>`).join('')}</ul>`:'';
   $('dayOv').hidden=false;
 }
 function closeDay(){$('dayOv').hidden=true;openDayStr=null}
+
+/* ---------- history of deleted events ---------- */
+const stamp=ts=>{const d=new Date(ts);return `${fDM.format(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`};
+let histQ='',histArm=null; // histArm: id of the entry whose "Hapus permanen" was clicked once (the second click confirms)
+function renderHist(){
+  const all=real.filter(e=>e.del).sort((a,b)=>b.del.at-a.del.at),q=histQ.trim().toLowerCase();
+  const list=all.filter(e=>!q||`${e.title} ${e.del.why||''} ${e.date} ${e.notes||''}`.toLowerCase().includes(q));
+  $('histSub').textContent=all.length?T('{n} kegiatan dihapus',{n:all.length}):'';
+  $('histClear').hidden=!all.length;$('histClear').textContent=histArm==='*'?T('Yakin kosongkan semua?'):T('Kosongkan riwayat');
+  $('histList').innerHTML=list.length?list.map(e=>{
+    const sp=e.endDate&&e.endDate>e.date?` → ${fDM.format(parse(e.endDate))}`:'';
+    return `<li style="${catStyle(e.cat)}"><span class="bar"></span><div class="hbody"><span class="title">${esc(e.title)}</span>
+      <span class="sub">${fDayShort.format(parse(e.date))}${sp} · ${timeText(e)}${e.repeat?' · '+T('seluruh seri berulang'):''}</span>
+      <span class="sub">${T('Dihapus {t}',{t:stamp(e.del.at)})}${e.del.why?' · <b>'+esc(e.del.why)+'</b>':''}</span></div>
+      <span class="acts"><button class="btn tonal small" data-hrestore="${esc(e.id)}">${T('Pulihkan')}</button><button class="btn text small ${histArm===e.id?'danger':''}" data-hpurge="${esc(e.id)}">${histArm===e.id?T('Yakin hapus?'):T('Hapus permanen')}</button></span></li>`;
+  }).join(''):`<li class="empty" style="display:block">${all.length?T('Tidak ada yang cocok.'):T('Belum ada kegiatan yang dihapus.')}</li>`;
+}
+function openHist(){histArm=null;histQ='';$('histQ').value='';closeDrawer();renderHist();$('histOv').hidden=false}
+function closeHist(){$('histOv').hidden=true;histArm=null}
+async function restoreDeleted(id){
+  const it=rawEv(id);if(!it||!it.del)return;
+  try{
+    const from=it.del.from,s=from&&rawEv(from.seriesId);
+    if(from&&s&&!s.del&&s.repeat){ // one date of a series: put the date back into the series, drop the history copy
+      await saveMany([{...s,repeat:{...s.repeat,skip:(s.repeat.skip||[]).filter(d=>d!==from.date)}}]);
+      await removeMany([id]);
+    }else{const {del,...rest}=it;await saveMany([rest])}
+    toast(T('Dipulihkan'));
+  }catch(err){toast(T('Gagal memulihkan. {m}',{m:err.message}))}
+}
+$('histQ').addEventListener('input',e=>{histQ=e.target.value;histArm=null;renderHist()});
+$('histList').addEventListener('click',async e=>{
+  const p=e.target.closest('[data-hpurge]');if(!p)return;
+  const id=p.dataset.hpurge;
+  if(histArm!==id){histArm=id;renderHist();return}
+  histArm=null;
+  try{await removeMany([id]);toast(T('Dihapus permanen'))}catch(err){toast(T('Gagal menghapus. {m}',{m:err.message}))}
+  renderHist();
+});
+$('histClear').addEventListener('click',async()=>{
+  if(histArm!=='*'){histArm='*';renderHist();return}
+  histArm=null;
+  try{await removeMany(real.filter(e=>e.del).map(e=>e.id));toast(T('Riwayat dikosongkan'))}catch(err){toast(T('Gagal menghapus. {m}',{m:err.message}))}
+  renderHist();
+});
+$('navHist').onclick=openHist;
+$('dHist').onclick=()=>{closeDay();openHist()};
 
 /* ---------- schedule ---------- */
 function renderList(){
@@ -442,7 +542,7 @@ function renderDashboard(){
   const att=ev.filter(e=>!e.cont&&isPast(e)&&((e.status==='rencana'&&(e.endDate||e.date)>=from&&!e.seriesId)||e.status==='tunda')).sort(sortEv).reverse();
   const late=e=>{if(e.status==='tunda')return T('Ditunda');const d=Math.round((midnight(now)-parse(e.endDate||e.date))/864e5);return d<=0?T('Terlewat hari ini'):T('Telat {n} hari',{n:d})};
   $('attCount').textContent=att.length||'';
-  $('attList').innerHTML=att.length?att.slice(0,5).map(e=>`<li style="${catStyle(e.cat)}"><button class="ev" data-open="${esc(e.id)}" style="flex:1;min-width:0"><span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span><span class="sub">${fDayShort.format(parse(e.date))} · ${timeText(e)} · <b class="late">${late(e)}</b></span></span></button>
+  $('attList').innerHTML=att.length?att.slice(0,5).map(e=>`<li style="${catStyle(e.cat)}"><button class="ev" data-open="${esc(e.id)}" style="flex:1;min-width:0"><span class="bar"></span><span class="body"><span class="title">${esc(e.title)}</span><span class="sub">${fDayShort.format(parse(e.date))} · ${timeText(e)} · <b class="late">${late(e)}</b>${e.why&&e.status==='tunda'?` · <i>${esc(e.why)}</i>`:''}</span></span></button>
     <span class="acts"><button class="btn tonal small" data-status="selesai" data-id="${esc(e.id)}">${T('Selesai')}</button><button class="btn text small" data-status="batal" data-id="${esc(e.id)}">${T('Batal')}</button></span></li>`).join('')+(att.length>5?`<li class="empty">${T('+{n} lainnya di tampilan Jadwal',{n:att.length-5})}</li>`:'')
     :`<li class="empty">${T('Semua kegiatan yang lewat sudah ditandai.')}</li>`;
 
@@ -654,6 +754,7 @@ function render(){
     ['todayList','attList','upList'].forEach(id=>$(id).innerHTML=`<li class="empty">${wait}</li>`);
   }
   if(openDayStr&&!$('dayOv').hidden)openDay(openDayStr);
+  if(!$('histOv').hidden)renderHist();
   if(detailId&&!$('detOv').hidden)openDetail(detailId);
   if(!$('repOv').hidden)renderReport();
   if(view==='day'||view==='x3'||view==='week')renderGrid();
@@ -740,6 +841,12 @@ $('tg').addEventListener('click',e=>{
 
 /* ---------- event detail ---------- */
 const linkify=s=>esc(s).replace(/\bhttps?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g,u=>`<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+// one line explaining a cancelled / postponed event: "Ditunda dari Sel, 17 Nov: dosen berhalangan" or "Alasan dibatalkan: sakit"
+function statusWhy(e){
+  if(e.movedFrom)return T('Ditunda dari {d}',{d:fDayShort.format(parse(e.movedFrom))})+(e.why?': '+e.why:'');
+  if(e.why&&(e.status==='batal'||e.status==='tunda'))return (e.status==='batal'?T('Alasan dibatalkan'):T('Alasan ditunda'))+': '+e.why;
+  return '';
+}
 function openDetail(id){
   const e=events().find(x=>x.id===id);
   if(!e){closeDetail();return}
@@ -755,6 +862,7 @@ function openDetail(id){
     ${e.seriesId?`<div class="det-row"><span class="ms">event_repeat</span><span>${T('Berulang')}: ${esc(ruleText(e.repeat,rawEv(e.seriesId).date))}</span></div>`:''}
     ${grp>1?`<div class="det-row"><span class="ms">event_repeat</span><span>${T('Bagian dari kegiatan berulang ({n} kegiatan)',{n:grp})}</span></div>`:''}
     ${e.notes?`<div class="det-row"><span class="ms">notes</span><div class="det-notes">${linkify(e.notes)}</div></div>`:''}
+    ${statusWhy(e)?`<div class="det-row"><span class="ms">info</span><span class="det-why">${esc(statusWhy(e))}</span></div>`:''}
     <div class="det-row"><span class="ms">check_circle</span><div class="seg" role="group" aria-label="${T('Status')}">${Object.entries(STATUS).map(([k,v])=>`<button data-status="${k}" data-id="${esc(e.id)}" aria-pressed="${e.status===k}">${v}</button>`).join('')}</div></div>`;
   if(!$('detDel').dataset.confirm)$('detDel').innerHTML='';
   $('detOv').hidden=false;
@@ -788,22 +896,27 @@ function delMarkup(ev,choiceOnly){
 }
 async function handleDel(zone,ev,action,done){
   if(action==='no'){zone.innerHTML=zone===$('detDel')?'':delMarkup(ev,false);delete zone.dataset.confirm;return}
-  let back; // what to put back on "Urungkan"
+  const r=await askReason({title:T('Kenapa dihapus?'),sub:ev.title,chips:WHY_DELETE,required:true,ok:'Hapus'});
+  if(!r)return;
+  let back,tomb=null; // back = what to put back on "Urungkan"
   try{
-    if(ev.seriesId&&action==='one'){ // drop just this date from the series
-      const s=rawEv(ev.seriesId);back=[s];
-      await saveMany([{...s,repeat:{...s.repeat,skip:[...(s.repeat.skip||[]),ev.date]}}]);
+    if(ev.seriesId&&action==='one'){ // drop just this date from the series; a hidden copy of that day goes into the history
+      const s=rawEv(ev.seriesId);back=[s];tomb=tombFor(ev,r.why);
+      await saveMany([{...s,repeat:{...s.repeat,skip:[...(s.repeat.skip||[]),ev.date]}},tomb]);
     }else{
       const ids=ev.seriesId?[ev.seriesId]:ev.spanId?[ev.spanId]:action==='all'?events().filter(x=>x.groupId===ev.groupId).map(x=>x.id):[ev.id];
       back=ids.map(rawEv).filter(Boolean);
-      await removeMany(ids);
+      await saveMany(back.map(x=>({...x,del:delInfo(r.why)})));
     }
   }catch(err){toast(T('Gagal menghapus. {m}',{m:err.message}));return}
   done();
   toast(back.length>1?T('{n} kegiatan dihapus',{n:back.length}):T('Dihapus'),async()=>{
-    try{await saveMany(back);toast(T('Dikembalikan'))}catch(err){toast(T('Gagal mengurungkan. {m}',{m:err.message}))}
+    try{await saveMany(back);if(tomb)await removeMany([tomb.id]);toast(T('Dikembalikan'))}catch(err){toast(T('Gagal mengurungkan. {m}',{m:err.message}))}
   });
 }
+// history entries: a deleted event keeps its row with .del = {at, why, from?}; one deleted date of a series becomes a hidden one-off copy
+const delInfo=why=>({at:Date.now(),why:why||''});
+const tombFor=(ev,why)=>({id:uid(),title:ev.title,date:ev.date,start:ev.start||'',end:ev.end||'',cat:ev.cat||'',status:ev.status,notes:ev.notes||'',del:{...delInfo(why),from:{seriesId:ev.seriesId,date:ev.date}}});
 $('delZone').addEventListener('click',e=>{const b=e.target.closest('[data-del]');if(b&&editing)handleDel($('delZone'),editing,b.dataset.del,closeForm)});
 $('detDel').addEventListener('click',e=>{
   const b=e.target.closest('[data-del]');const ev=events().find(x=>x.id===detailId);
@@ -1050,7 +1163,7 @@ function aiContext(withTools=true){
   const ws0=weekStart(now),m0=new Date(now.getFullYear(),now.getMonth(),1),m1=new Date(now.getFullYear(),now.getMonth()+1,0);
   const sFrom=m0<ws0?m0:ws0,sTo=m1>addDays(ws0,13)?m1:addDays(ws0,13),sDays=Math.round((sTo-sFrom)/864e5)+1; // summary range
   const wFrom=ymd(sFrom<addDays(t0,-7)?sFrom:addDays(t0,-7)),wTo=ymd(sTo>addDays(t0,27)?sTo:addDays(t0,27)),dm=k=>`${fWd.format(parse(k))} ${k.slice(5)}`;
-  real.filter(s=>s.repeat&&(!s.repeat.until||s.repeat.until>=from)&&s.date<=to).forEach(s=>{
+  live().filter(s=>s.repeat&&(!s.repeat.until||s.repeat.until>=from)&&s.date<=to).forEach(s=>{
     const n=lines.length+1;aiRefs.set(String(n),s.id);
     const occ=expandSeries(s).filter(o=>o.date>=wFrom&&o.date<=wTo);
     const on=occ.filter(active).map(o=>dm(o.date)+(o.status!=='rencana'?' ('+STATUS[o.status]+')':'')).join(', ');
@@ -1474,11 +1587,16 @@ async function applyProposals(turn,keys){
     if(!cur){p.status='invalid';p.error={k:'Kegiatan ini sudah tidak ada di jadwal.'};continue}
     p.snapshot=cur;
     if(p.op==='ubah'){ups.push({...cur,...p.patch});upP.push(p)}
-    else if(p.skipDate){ups.push({...cur,repeat:{...cur.repeat,skip:[...(cur.repeat.skip||[]),p.skipDate]}});upP.push(p)} // delete one date of a series
-    else{dels.push(cur.id);delP.push(p)}
+    else if(p.skipDate){ // delete one date of a series (kept in the history)
+      const occ=expandSeries(cur).find(o=>o.date===p.skipDate),tomb=occ&&tombFor(occ,T('Dihapus lewat Asisten AI'));
+      ups.push({...cur,repeat:{...cur.repeat,skip:[...(cur.repeat.skip||[]),p.skipDate]}});
+      if(tomb){ups.push(tomb);p.tombId=tomb.id}
+      upP.push(p);
+    }
+    else{dels.push({...cur,del:delInfo(T('Dihapus lewat Asisten AI'))});delP.push(p)} // soft delete: goes to the history, can be restored
   }
   if(ups.length&&!fail){try{await saveMany(ups);upP.forEach(p=>p.status='applied')}catch(e){fail=e}}
-  if(dels.length&&!fail){try{await removeMany(dels);delP.forEach(p=>p.status='applied')}catch(e){fail=e}}
+  if(dels.length&&!fail){try{await saveMany(dels);delP.forEach(p=>p.status='applied')}catch(e){fail=e}}
   todo.forEach(p=>{if(p.status==='working')p.status='pending'});
   renderAI();
   const n=todo.filter(p=>p.status==='applied').length;
@@ -1496,7 +1614,10 @@ async function undoProposal(turn,key){
       await saveCats(p.op==='tambah'?cats.filter(c=>catName(c)!==p.catLabel):p.op==='ubah'?cats.map(c=>c.id===p.catId?back:c):[...cats,back]);
     }
     else if(p.op==='tambah')await removeMany([p.next.id]);
-    else await saveMany([p.snapshot]); // ubah and hapus both restore the earlier version
+    else{
+      await saveMany([p.snapshot]); // ubah and hapus both restore the earlier version
+      if(p.tombId)await removeMany([p.tombId]);
+    }
     p.status='pending';toast(T('Perubahan diurungkan'));
   }catch(e){p.status='applied';toast(T('Gagal mengurungkan. {m}',{m:e.message}))}
   renderAI();
@@ -1736,7 +1857,7 @@ $('dAdd').onclick=()=>{const d=openDayStr;returnDay=d;$('dayOv').hidden=true;ope
 $('dOpen').onclick=()=>{const d=openDayStr;closeDay();openDayView(d)};
 document.body.addEventListener('click',e=>{
   const cl=e.target.closest('[data-close]');
-  if(cl){({form:closeForm,day:closeDay,cats:closeCats,det:closeDetail,rep:closeRep})[cl.dataset.close]();return}
+  if(cl){({form:closeForm,day:closeDay,cats:closeCats,det:closeDetail,rep:closeRep,hist:closeHist})[cl.dataset.close]();return}
   const vg=e.target.closest('[data-view-go]');
   if(vg){
     const v=vg.dataset.viewGo;
@@ -1744,6 +1865,8 @@ document.body.addEventListener('click',e=>{
     const back=vg.id==='dashBtn'&&view==='summary';
     setView(back||v==='calendar'?lastCalView:v);closeDrawer();return;
   }
+  const hr=e.target.closest('[data-hrestore]');
+  if(hr){restoreDeleted(hr.dataset.hrestore);return}
   const op=e.target.closest('[data-open]');
   if(op){showDetail(op.dataset.open);return}
   const st=e.target.closest('[data-status]');
@@ -1762,13 +1885,13 @@ document.body.addEventListener('click',e=>{
   if(rg){catRange=rg.dataset.range;renderDashboard()}
 });
 $('monthGrid').addEventListener('keydown',e=>{const c=e.target.closest('.mcell');if(c&&e.target===c&&(e.key==='Enter'||e.key===' ')){e.preventDefault();openDay(c.dataset.day)}});
-const OVERLAYS={formOv:closeForm,dayOv:closeDay,catOv:closeCats,detOv:closeDetail,repOv:closeRep};
+const OVERLAYS={formOv:closeForm,dayOv:closeDay,catOv:closeCats,detOv:closeDetail,repOv:closeRep,histOv:closeHist};
 Object.keys(OVERLAYS).forEach(id=>$(id).addEventListener('click',e=>{if(e.target===$(id))OVERLAYS[id]()}));
 const anyOverlay=()=>Object.keys(OVERLAYS).some(id=>!$(id).hidden)||!$('login').hidden;
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
     if(!$('viewMenu').hidden){toggleViewMenu(false);$('viewBtn').focus();return}
-    if(!$('catOv').hidden)closeCats();else if(!$('formOv').hidden)closeForm();else if(!$('detOv').hidden)closeDetail();else if(!$('dayOv').hidden)closeDay();else if(!$('repOv').hidden)closeRep();
+    if(!$('histOv').hidden)closeHist();else if(!$('catOv').hidden)closeCats();else if(!$('formOv').hidden)closeForm();else if(!$('detOv').hidden)closeDetail();else if(!$('dayOv').hidden)closeDay();else if(!$('repOv').hidden)closeRep();
     else if($('shell').classList.contains('drawer'))closeDrawer();
     else if(!$('aiPanel').hidden&&mqMobile.matches)setAI(false);
     return;
@@ -1821,7 +1944,7 @@ window.addEventListener('focus',()=>{if(backend==='api'&&!anyOverlay())loadRemot
 
 /* ---------- language ---------- */
 // containers the app fills itself (already in the right language, and they hold user data): the static-DOM translator skips them
-I18N.skip='#notifMenu,#tg,#monthGrid,#listOut,#hello,#stats,#todayList,#catBars,#attList,#upList,#weekLoad,#weekLegend,#weekRange,#repRange,#repBody,#todayMeta,#weekMeta,#dList,#dSum,#dTitle,#detBody,#detDel,#cmList,#aiLog,#aiChipRow,#aiProv,#aiModel,#mini,#catVis,#banner,#f-cats,#delZone,#viewMenu,#viewLabel,#periodTitle,#repPreview,#f-err,#loginErr,#toast,#shortcuts,#mTitle';
+I18N.skip='#histList,#histSub,#dDel,#whyOv,#histClear,#notifMenu,#tg,#monthGrid,#listOut,#hello,#stats,#todayList,#catBars,#attList,#upList,#weekLoad,#weekLegend,#weekRange,#repRange,#repBody,#todayMeta,#weekMeta,#dList,#dSum,#dTitle,#detBody,#detDel,#cmList,#aiLog,#aiChipRow,#aiProv,#aiModel,#mini,#catVis,#banner,#f-cats,#delZone,#viewMenu,#viewLabel,#periodTitle,#repPreview,#f-err,#loginErr,#toast,#shortcuts,#mTitle';
 function renderShortcuts(){
   const k=(c,w)=>`<kbd>${c}</kbd> ${T(w)}`;
   $('shortcuts').innerHTML=`${T('Pintasan:')} ${[k('D','hari'),k('X','3 hari'),k('W','minggu'),k('M','bulan'),k('A','jadwal'),k('R','dashboard'),k('T','hari ini'),k('C','buat')].join(' · ')}`;
