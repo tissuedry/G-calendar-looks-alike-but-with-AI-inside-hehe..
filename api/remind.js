@@ -11,7 +11,6 @@ const DEFAULT_LEAD = Math.min(120, Math.max(1, Number(process.env.REMIND_MINUTES
 const SENT_KEY = 'tg_sent';
 const LEAD_KEY = 'notify_lead'; // set by the bell menu in the app (api/notify.js): 0 = off
 const DIGEST_TIME = (process.env.DIGEST_TIME || '05:30').trim(); // 'HH:MM' in TZ, or 'off'
-const DIGEST_GRACE = 90; // still send the summary this many minutes late if a cron run was missed
 const DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
@@ -106,9 +105,9 @@ export default route(['GET', 'POST'], async (req, res) => {
     changed = false;
   };
 
-  // 1) morning summary, once per day, from DIGEST_TIME (a few runs later is fine if one was missed)
+  // 1) summary of today, once per day, from DIGEST_TIME on. If nothing ran at that time (cron created later, outage), it goes out on the first run after it.
   const dKey = `${today}|digest`;
-  if (/^\d{2}:\d{2}$/.test(DIGEST_TIME) && !sent[dKey] && nowM >= mins(DIGEST_TIME) && nowM < mins(DIGEST_TIME) + DIGEST_GRACE) {
+  if (/^\d{2}:\d{2}$/.test(DIGEST_TIME) && !sent[dKey] && nowM >= mins(DIGEST_TIME)) {
     const d = digestText(today, events, catName);
     out.digest = d.n;
     if (dry) out.preview = d.text;
