@@ -1,15 +1,16 @@
 // Cron endpoint for the Telegram messages. Call it every minute from an external cron (e.g. cron-job.org) with the header
 //   Authorization: Bearer <CRON_SECRET>.   Add ?dry=1 to see what would be sent without sending anything.
 // It sends (1) a morning summary of today's events (DIGEST_TIME, default 05:30) and (2) a reminder before each event,
-// as many minutes before as the bell menu in the app says. It does not use the login cookie: the secret is the only way in.
+// in three steps (30, 15 and 5 minutes before by default). This is separate from the bell in the web app, which only controls
+// the browser notifications. It does not use the login cookie: the secret is the only way in.
 import crypto from 'node:crypto';
 import { route, send, HttpError } from '../lib/http.js';
 import { store } from '../lib/store.js';
 
 const TZ = process.env.APP_TIMEZONE || 'Asia/Jakarta';
-const DEFAULT_LEAD = Math.min(120, Math.max(1, Number(process.env.REMIND_MINUTES) || 10)); // used until the bell in the app was set once
+// minutes before the start at which a reminder is sent (REMIND_STEPS="30,15,5"), largest first
+const STEPS = [...new Set((process.env.REMIND_STEPS || '30,15,5').split(',').map(Number).filter(n => Number.isInteger(n) && n > 0 && n <= 240))].sort((a, b) => b - a);
 const SENT_KEY = 'tg_sent';
-const LEAD_KEY = 'notify_lead'; // set by the bell menu in the app (api/notify.js): 0 = off
 const DIGEST_TIME = (process.env.DIGEST_TIME || '05:30').trim(); // 'HH:MM' in TZ, or 'off'
 const DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -89,14 +90,10 @@ export default route(['GET', 'POST'], async (req, res) => {
   if (!authorised(req)) throw new HttpError(401, 'Tidak diizinkan', 'unauthorized');
   const dry = /[?&]dry=1\b/.test(req.url || '');
   const { date: today, min: nowM } = nowLocal();
-  const chosen = await store().getSetting(LEAD_KEY);
-  const LEAD = Number.isInteger(chosen) && chosen >= 0 ? chosen : DEFAULT_LEAD;
-  if (LEAD === 0) return send(res, 200, { sent: 0, due: [], lead: 0, off: true }); // everything is switched off in the app
-
   const { events, cats } = await store().getState();
   const catName = id => (cats || []).find(c => c.id === id)?.label || '';
   const sent = (await store().getSetting(SENT_KEY)) || {};
-  const out = { now: `${today} ${hhmm(nowM)}`, lead: LEAD, fromApp: Number.isInteger(chosen), sent: 0, due: [], dry };
+  const out = { now: `${today} ${hhmm(nowM)}`, steps: STEPS, sent: 0, due: [], dry };
   let changed = false;
   const save = async () => { // forget old days, then store which messages were already sent
     const keep = addDay(today, -1);
@@ -114,7 +111,7 @@ export default route(['GET', 'POST'], async (req, res) => {
     if (!dry) { await telegram(d.text); sent[dKey] = 1; changed = true; out.sent++; }
   }
 
-  // 2) reminders for events that start within LEAD minutes
+  // 2) reminders at each step before an event starts
   const due = [];
   for (const [offset, d] of [[0, today], [1440, addDay(today, 1)]]) { // tomorrow too, for reminders just after midnight
     for (const base of events || []) {
@@ -124,10 +121,13 @@ export default route(['GET', 'POST'], async (req, res) => {
       const t = e.start || e.end; // a start time, or only an end time = a deadline
       if (!t) continue;
       const left = offset + mins(t) - nowM;
-      if (left <= 0 || left > LEAD) continue;
-      const key = `${d}|${base.id}|${e.start || ''}|${e.end || ''}`;
-      if (sent[key]) continue;
-      due.push({ e, t, left, key, cat: catName(e.cat) });
+      if (left <= 0 || !STEPS.length || left > STEPS[0]) continue;
+      // the step we are in = the smallest one that is still >= the time left. Only that one is sent; the bigger ones are
+      // marked done too, so an event made 10 minutes before the start gets one reminder, not three.
+      const step = [...STEPS].reverse().find(s => left <= s);
+      const id = `${d}|${base.id}|${e.start || ''}|${e.end || ''}`;
+      if (sent[`${id}|${step}`]) continue;
+      due.push({ e, t, left, keys: STEPS.filter(s => s >= step).map(s => `${id}|${s}`), cat: catName(e.cat) });
     }
   }
   due.sort((a, b) => a.left - b.left || a.e.title.localeCompare(b.e.title));
@@ -140,13 +140,13 @@ export default route(['GET', 'POST'], async (req, res) => {
       const when = `${e.start || e.end}${e.start && e.end ? '–' + e.end : ''}`;
       text = `⏰ ${e.start ? 'Mulai' : 'Tenggat'} ${left} menit lagi\n${e.title}\n${when}${cat ? ' · ' + cat : ''}`;
     } else {
-      const lines = due.slice(0, 6).map(({ e, t }) => `• ${t}${e.start ? '' : ' (tenggat)'} ${e.title}`);
+      const lines = due.slice(0, 6).map(({ e, t, left }) => `• ${t}${e.start ? '' : ' (tenggat)'} ${e.title} · ${left} menit lagi`);
       if (due.length > 6) lines.push(`+${due.length - 6} lainnya`);
       text = `⏰ ${due.length} kegiatan segera dimulai\n${lines.join('\n')}`;
     }
     try {
       await telegram(text); // if this throws nothing is marked as sent, so the next minute tries again
-      due.forEach(x => { sent[x.key] = 1; });
+      due.forEach(x => x.keys.forEach(k => { sent[k] = 1; }));
       changed = true; out.sent += due.length;
     } finally {
       if (changed) await save(); // keeps the summary's mark even when the reminder failed
