@@ -6,8 +6,9 @@ import { route, send, HttpError } from '../lib/http.js';
 import { store } from '../lib/store.js';
 
 const TZ = process.env.APP_TIMEZONE || 'Asia/Jakarta';
-const LEAD = Math.min(120, Math.max(1, Number(process.env.REMIND_MINUTES) || 10)); // minutes before the start
+const DEFAULT_LEAD = Math.min(120, Math.max(1, Number(process.env.REMIND_MINUTES) || 10)); // used until the bell in the app was set once
 const SENT_KEY = 'tg_sent';
+const LEAD_KEY = 'notify_lead'; // set by the bell menu in the app (api/notify.js): 0 = off
 
 // "now" in the user's time zone (the server runs in UTC)
 function nowLocal() {
@@ -58,6 +59,9 @@ export default route(['GET', 'POST'], async (req, res) => {
   const { events, cats } = await store().getState();
   const catName = id => (cats || []).find(c => c.id === id)?.label || '';
   const sent = (await store().getSetting(SENT_KEY)) || {};
+  const chosen = await store().getSetting(LEAD_KEY);
+  const LEAD = Number.isInteger(chosen) && chosen >= 0 ? chosen : DEFAULT_LEAD;
+  if (LEAD === 0) return send(res, 200, { sent: 0, due: [], off: true }); // reminders switched off in the app
 
   const due = [];
   for (const [offset, d] of [[0, today], [1440, addDay(today, 1)]]) { // tomorrow too, for reminders just after midnight

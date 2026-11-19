@@ -1994,12 +1994,12 @@ let notifyLead=(()=>{const v=Number(store.get(NOTIFY_KEY));return NOTIFY_OPTS.in
 const canNotify=()=>'Notification' in window;
 const notifyOn=()=>notifyLead>0&&canNotify()&&Notification.permission==='granted';
 function renderNotify(){
-  const on=notifyOn();
+  const on=notifyLead>0; // on for any channel: the browser, Telegram, or both
   $('notifIco').textContent=on?'notifications_active':'notifications_off';
   $('notifBtn').setAttribute('aria-pressed',on);
   const tip=on?T('Pengingat: {n} menit sebelum',{n:notifyLead}):T('Pengingat mati');
   $('notifBtn').title=tip;$('notifBtn').setAttribute('aria-label',tip);
-  const note=!canNotify()?T('Browser ini tidak mendukung notifikasi.'):Notification.permission==='denied'?T('Notifikasi diblokir browser. Izinkan lewat ikon gembok di address bar, lalu pilih lagi.'):T('Pengingat muncul selama tab kalender masih terbuka.');
+  const note=!canNotify()?T('Browser ini tidak mendukung notifikasi.'):Notification.permission==='denied'?T('Notifikasi diblokir browser. Izinkan lewat ikon gembok di address bar, lalu pilih lagi.'):T('Di browser, pengingat muncul selama tab kalender terbuka. Pengingat Telegram tetap terkirim walau tab ditutup.');
   $('notifMenu').innerHTML=`<div class="menu-head">${T('Ingatkan sebelum kegiatan mulai')}</div>`
     +NOTIFY_OPTS.map(n=>`<button role="menuitemradio" aria-checked="${n===notifyLead}" data-lead="${n}"><span>${n?T('{n} menit sebelum',{n}):T('Mati')}</span></button>`).join('')
     +`<div class="menu-note">${note}</div>`;
@@ -2021,18 +2021,29 @@ $('notifMenu').addEventListener('keydown',e=>{
 $('notifMenu').addEventListener('click',async e=>{
   const b=e.target.closest('[data-lead]');if(!b)return;
   const n=Number(b.dataset.lead);
-  if(n>0){
-    if(!canNotify()){toast(T('Browser ini tidak mendukung notifikasi.'));return}
-    if(Notification.permission==='default'){try{await Notification.requestPermission()}catch(err){}}
-    if(Notification.permission!=='granted'){toast(T('Izin notifikasi ditolak.'));renderNotify();return}
-  }
+  // the choice is kept even when the browser refuses notifications: Telegram reminders use it too
+  if(n>0&&canNotify()&&Notification.permission==='default'){try{await Notification.requestPermission()}catch(err){}}
   notifyLead=n;store.set(NOTIFY_KEY,String(n));renderNotify();toggleNotifyMenu(false);
+  pushLead(n);
   if(n>0){
     toast(T('Pengingat aktif: {n} menit sebelum kegiatan.',{n}));
-    try{new Notification(T('Pengingat aktif'),{body:T('Kamu akan diingatkan {n} menit sebelum kegiatan dimulai.',{n}),icon:'icon-192.png',tag:'agenda-notify-on'})}catch(err){}
+    if(notifyOn())try{new Notification(T('Pengingat aktif'),{body:T('Kamu akan diingatkan {n} menit sebelum kegiatan dimulai.',{n}),icon:'icon-192.png',tag:'agenda-notify-on'})}catch(err){}
   }else toast(T('Pengingat dimatikan.'));
 });
+// the server keeps the choice too (Telegram reminders follow it). First load: adopt the server's value, or send ours if it has none.
+let leadSynced=false;
+async function pushLead(n){if(backend!=='api')return;try{await api('notify',{method:'PUT',body:{lead:n}})}catch(err){toast(T('Pengingat Telegram belum tersimpan di server. {m}',{m:err.message}))}}
+async function syncLead(){
+  if(leadSynced||!loaded||backend!=='api')return;
+  leadSynced=true;
+  try{
+    const r=await api('notify');
+    if(r.lead===null){if(notifyLead>0)pushLead(notifyLead)}
+    else if(r.lead!==notifyLead){notifyLead=r.lead;store.set(NOTIFY_KEY,String(r.lead));renderNotify()}
+  }catch(err){leadSynced=false}
+}
 function notifyTick(){
+  syncLead();
   if(!loaded||!notifyOn())return;
   const d=new Date(),today=ymd(d),nowM=d.getHours()*60+d.getMinutes();
   let seen={};try{seen=JSON.parse(store.get(NOTIFIED_KEY)||'{}')}catch(err){}

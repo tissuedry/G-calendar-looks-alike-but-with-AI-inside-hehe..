@@ -250,6 +250,8 @@ const EN = {
   "Ditandai: {s}": "Marked: {s}",
   "Gagal menyimpan. {m}": "Could not save. {m}",
   "Batalkan tanda": "Unmark",
+  "Di browser, pengingat muncul selama tab kalender terbuka. Pengingat Telegram tetap terkirim walau tab ditutup.": "In the browser, reminders show while the calendar tab is open. Telegram reminders are sent even when the tab is closed.",
+  "Pengingat Telegram belum tersimpan di server. {m}": "Telegram reminder setting was not saved on the server. {m}",
   "Kenapa dihapus?": "Why delete it?",
   "Kenapa dibatalkan?": "Why cancel it?",
   "Kenapa ditunda?": "Why postpone it?",
