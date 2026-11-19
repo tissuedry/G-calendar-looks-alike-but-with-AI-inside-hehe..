@@ -91,12 +91,12 @@ export default route(['GET', 'POST'], async (req, res) => {
   const { date: today, min: nowM } = nowLocal();
   const chosen = await store().getSetting(LEAD_KEY);
   const LEAD = Number.isInteger(chosen) && chosen >= 0 ? chosen : DEFAULT_LEAD;
-  if (LEAD === 0) return send(res, 200, { sent: 0, due: [], off: true }); // everything is switched off in the app
+  if (LEAD === 0) return send(res, 200, { sent: 0, due: [], lead: 0, off: true }); // everything is switched off in the app
 
   const { events, cats } = await store().getState();
   const catName = id => (cats || []).find(c => c.id === id)?.label || '';
   const sent = (await store().getSetting(SENT_KEY)) || {};
-  const out = { now: `${today} ${hhmm(nowM)}`, sent: 0, due: [], dry };
+  const out = { now: `${today} ${hhmm(nowM)}`, lead: LEAD, fromApp: Number.isInteger(chosen), sent: 0, due: [], dry };
   let changed = false;
   const save = async () => { // forget old days, then store which messages were already sent
     const keep = addDay(today, -1);
