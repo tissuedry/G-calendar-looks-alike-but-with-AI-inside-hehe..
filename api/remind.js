@@ -52,12 +52,16 @@ function authorised(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+// messages use Telegram's HTML mode (for the bold title), so anything typed by the user must be escaped
+const esc = v => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const bold = v => `<b>${esc(v)}</b>`;
+
 async function telegram(text) {
   const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chat) throw new HttpError(503, 'TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID belum diatur.', 'no_telegram');
   const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chat, text: text.slice(0, 4000), disable_web_page_preview: true }),
+    body: JSON.stringify({ chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true }),
     signal: AbortSignal.timeout(10000),
   });
   if (!r.ok) {
@@ -76,13 +80,15 @@ function digestText(today, events, catName) {
     const when = e.start ? `${e.start}${e.end ? '–' + e.end : ''}` : e.end ? `tenggat ${e.end}` : 'tanpa jam';
     const sortKey = e.start ? mins(e.start) : e.end ? mins(e.end) : 2000;
     const cat = catName(e.cat);
-    items.push({ sortKey, line: `• ${when} · ${e.title}${e.dayN ? ` (hari ${e.dayNo}/${e.dayN})` : ''}${cat ? ' · ' + cat : ''}` });
+    items.push({ sortKey, line: `• ${bold(e.title)}${e.dayN ? ` (hari ${e.dayNo}/${e.dayN})` : ''} · ${esc(when)}${cat ? ' · ' + esc(cat) : ''}` });
   }
   items.sort((a, b) => a.sortKey - b.sortKey);
-  const head = `📅 ${dayName(today)}`;
+  const head = `📅 ${bold(dayName(today))}`;
   if (!items.length) return { text: `${head}\nHari ini tidak ada kegiatan.`, n: 0 };
-  const lines = items.slice(0, 40).map(x => x.line);
-  if (items.length > 40) lines.push(`+${items.length - 40} lainnya`);
+  const lines = [];
+  let size = 0; // Telegram allows 4096 characters per message; leave room for the header
+  for (const x of items) { if (size + x.line.length > 3600) break; lines.push(x.line); size += x.line.length + 1; }
+  if (items.length > lines.length) lines.push(`+${items.length - lines.length} lainnya`);
   return { text: `${head}\n${items.length} kegiatan hari ini\n\n${lines.join('\n')}`, n: items.length };
 }
 
@@ -138,9 +144,10 @@ export default route(['GET', 'POST'], async (req, res) => {
     if (due.length === 1) {
       const { e, left, cat } = due[0];
       const when = `${e.start || e.end}${e.start && e.end ? '–' + e.end : ''}`;
-      text = `⏰ ${e.start ? 'Mulai' : 'Tenggat'} ${left} menit lagi\n${e.title}\n${when}${cat ? ' · ' + cat : ''}`;
+      text = `${bold(e.title)}
+⏰ ${e.start ? 'Mulai' : 'Tenggat'} ${left} menit lagi · ${esc(when)}${cat ? ' · ' + esc(cat) : ''}`;
     } else {
-      const lines = due.slice(0, 6).map(({ e, t, left }) => `• ${t}${e.start ? '' : ' (tenggat)'} ${e.title} · ${left} menit lagi`);
+      const lines = due.slice(0, 6).map(({ e, t, left }) => `• ${bold(e.title)} · ${t}${e.start ? '' : ' (tenggat)'} · ${left} menit lagi`);
       if (due.length > 6) lines.push(`+${due.length - 6} lainnya`);
       text = `⏰ ${due.length} kegiatan segera dimulai\n${lines.join('\n')}`;
     }
