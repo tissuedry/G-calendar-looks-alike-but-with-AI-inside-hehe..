@@ -11,6 +11,9 @@ const TZ = process.env.APP_TIMEZONE || 'Asia/Jakarta';
 // minutes before the start at which a reminder is sent (REMIND_STEPS="30,15,5"), largest first
 const STEPS = [...new Set((process.env.REMIND_STEPS || '30,15,5').split(',').map(Number).filter(n => Number.isInteger(n) && n > 0 && n <= 240))].sort((a, b) => b - a);
 const SENT_KEY = 'tg_sent';
+const MSGS_KEY = 'tg_msgs'; // ids of the messages sent, so they can be deleted later
+// hours after which the bot deletes its own messages from the chat (TELEGRAM_KEEP_HOURS, default 24; "off" keeps everything; Telegram's limit is 48)
+const KEEP_HOURS = /^off$/i.test((process.env.TELEGRAM_KEEP_HOURS || '').trim()) ? 0 : Math.min(Math.max(Number(process.env.TELEGRAM_KEEP_HOURS) || 24, 1), 46);
 const DIGEST_TIME = (process.env.DIGEST_TIME || '05:30').trim(); // 'HH:MM' in TZ, or 'off'
 const DAYS = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -68,6 +71,19 @@ async function telegram(text) {
     let d = ''; try { d = (await r.json()).description || ''; } catch { /* ignore */ }
     throw new HttpError(502, `Telegram menolak pesan (${r.status}) ${d}`.trim(), 'telegram');
   }
+  try { return (await r.json()).result?.message_id || 0; } catch { return 0; }
+}
+
+// delete one of the bot's own messages. Telegram only allows it for 48 hours after sending. Returns true when it is gone (or can never be deleted).
+async function telegramDelete(messageId) {
+  const token = process.env.TELEGRAM_BOT_TOKEN, chat = process.env.TELEGRAM_CHAT_ID;
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chat, message_id: messageId }), signal: AbortSignal.timeout(8000),
+    });
+    return r.ok || r.status === 400; // 400 = already deleted by hand, or older than 48 h: nothing more to do
+  } catch { return false; } // network problem: try again on the next run
 }
 
 // the morning summary: everything planned today, by time; untimed ones at the end
@@ -101,6 +117,22 @@ export default route(['GET', 'POST'], async (req, res) => {
   const sent = (await store().getSetting(SENT_KEY)) || {};
   const out = { now: `${today} ${hhmm(nowM)}`, steps: STEPS, sent: 0, due: [], dry };
   let changed = false;
+
+  // 0) clean-up: messages the bot sent more than KEEP_HOURS ago are deleted from the chat (Telegram allows this within 48 hours)
+  let msgs = KEEP_HOURS ? ((await store().getSetting(MSGS_KEY)) || []) : [];
+  let msgsChanged = false;
+  const remember = id => { if (KEEP_HOURS && id) { msgs.push({ id, t: Date.now() }); msgsChanged = true; } };
+  if (KEEP_HOURS && !dry) {
+    const keep = [];
+    for (const m of msgs) {
+      const age = Date.now() - m.t;
+      if (age < KEEP_HOURS * 36e5) keep.push(m);
+      else if (age < 47 * 36e5 && !(await telegramDelete(m.id))) keep.push(m); // could not delete now: retry later, until Telegram's limit
+      else out.deleted = (out.deleted || 0) + 1;
+    }
+    if (keep.length !== msgs.length) { msgs = keep; msgsChanged = true; }
+  }
+  const saveMsgs = async () => { if (msgsChanged) { await store().setSetting(MSGS_KEY, msgs); msgsChanged = false; } };
   const save = async () => { // forget old days, then store which messages were already sent
     const keep = addDay(today, -1);
     for (const k of Object.keys(sent)) if (k.slice(0, 10) < keep) delete sent[k];
@@ -114,7 +146,7 @@ export default route(['GET', 'POST'], async (req, res) => {
     const d = digestText(today, events, catName);
     out.digest = d.n;
     if (dry) out.preview = d.text;
-    if (!dry) { await telegram(d.text); sent[dKey] = 1; changed = true; out.sent++; }
+    if (!dry) { remember(await telegram(d.text)); sent[dKey] = 1; changed = true; out.sent++; }
   }
 
   // 2) reminders at each step before an event starts
@@ -153,14 +185,16 @@ export default route(['GET', 'POST'], async (req, res) => {
       text = `⏰ ${due.length} kegiatan ${due.every(x => !x.left) ? 'dimulai sekarang' : 'segera dimulai'}\n${lines.join('\n')}`;
     }
     try {
-      await telegram(text); // if this throws nothing is marked as sent, so the next minute tries again
+      remember(await telegram(text)); // if this throws nothing is marked as sent, so the next minute tries again
       due.forEach(x => x.keys.forEach(k => { sent[k] = 1; }));
       changed = true; out.sent += due.length;
     } finally {
+      await saveMsgs();
       if (changed) await save(); // keeps the summary's mark even when the reminder failed
     }
   }
 
   if (changed) await save();
+  await saveMsgs();
   send(res, 200, out);
 });
