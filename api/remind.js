@@ -127,13 +127,14 @@ export default route(['GET', 'POST'], async (req, res) => {
       const t = e.start || e.end; // a start time, or only an end time = a deadline
       if (!t) continue;
       const left = offset + mins(t) - nowM;
-      if (left <= 0 || !STEPS.length || left > STEPS[0]) continue;
-      // the step we are in = the smallest one that is still >= the time left. Only that one is sent; the bigger ones are
+      // left <= 0 is the moment it starts ("sekarang"); one minute of slack in case a cron run was late
+      if (left < -1 || !STEPS.length || left > STEPS[0]) continue;
+      // the step we are in = the smallest one that is still >= the time left (0 = starting now). Only that one is sent; the bigger ones are
       // marked done too, so an event made 10 minutes before the start gets one reminder, not three.
-      const step = [...STEPS].reverse().find(s => left <= s);
+      const step = left <= 0 ? 0 : [...STEPS].reverse().find(s => left <= s);
       const id = `${d}|${base.id}|${e.start || ''}|${e.end || ''}`;
       if (sent[`${id}|${step}`]) continue;
-      due.push({ e, t, left, keys: STEPS.filter(s => s >= step).map(s => `${id}|${s}`), cat: catName(e.cat) });
+      due.push({ e, t, left: Math.max(left, 0), keys: [...STEPS.filter(s => s >= step), ...(step === 0 ? [0] : [])].map(s => `${id}|${s}`), cat: catName(e.cat) });
     }
   }
   due.sort((a, b) => a.left - b.left || a.e.title.localeCompare(b.e.title));
@@ -145,11 +146,11 @@ export default route(['GET', 'POST'], async (req, res) => {
       const { e, left, cat } = due[0];
       const when = `${e.start || e.end}${e.start && e.end ? '–' + e.end : ''}`;
       text = `${bold(e.title)}
-⏰ ${e.start ? 'Mulai' : 'Tenggat'} ${left} menit lagi · ${esc(when)}${cat ? ' · ' + esc(cat) : ''}`;
+⏰ ${e.start ? 'Mulai' : 'Tenggat'} ${left ? left + ' menit lagi' : 'sekarang'} · ${esc(when)}${cat ? ' · ' + esc(cat) : ''}`;
     } else {
-      const lines = due.slice(0, 6).map(({ e, t, left }) => `• ${bold(e.title)} · ${t}${e.start ? '' : ' (tenggat)'} · ${left} menit lagi`);
+      const lines = due.slice(0, 6).map(({ e, t, left }) => `• ${bold(e.title)} · ${t}${e.start ? '' : ' (tenggat)'} · ${left ? left + ' menit lagi' : 'sekarang'}`);
       if (due.length > 6) lines.push(`+${due.length - 6} lainnya`);
-      text = `⏰ ${due.length} kegiatan segera dimulai\n${lines.join('\n')}`;
+      text = `⏰ ${due.length} kegiatan ${due.every(x => !x.left) ? 'dimulai sekarang' : 'segera dimulai'}\n${lines.join('\n')}`;
     }
     try {
       await telegram(text); // if this throws nothing is marked as sent, so the next minute tries again

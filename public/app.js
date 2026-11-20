@@ -2055,11 +2055,17 @@ function notifyTick(){
   const due=[];
   events().filter(e=>e.date===today&&active(e)&&e.status!=='selesai'&&(e.start||e.end)).forEach(e=>{
     const at=mins(e.start||e.end);
-    if(nowM<at-notifyLead||nowM>=at)return;
-    const key=`${today}|${e.id}|${e.start||''}|${e.end||''}`;
-    if(seen[key])return;
-    seen[key]=1;changed=true;
-    due.push({e,at,key});
+    const base=`${today}|${e.id}|${e.start||''}|${e.end||''}`;
+    if(nowM>=at-notifyLead&&nowM<at){ // the "N minutes before" reminder
+      if(seen[base])return;
+      seen[base]=1;changed=true;
+      due.push({e,at,key:base});
+    }else if(nowM>=at&&nowM<=at+1){ // and once more when it starts ("sekarang"); a minute of slack for background tabs
+      const k=base+'|0';
+      if(seen[k])return;
+      seen[k]=seen[base]=1;changed=true;
+      due.push({e,at,key:k,now:true});
+    }
   });
   if(changed)store.set(NOTIFIED_KEY,JSON.stringify(seen));
   if(!due.length)return;
@@ -2071,13 +2077,14 @@ function notifyTick(){
     }catch(err){toast(`${title}: ${body}`)}
   };
   if(due.length===1){ // one event: its own notification
-    const {e,at,key}=due[0],left=at-nowM,when=`${e.start||e.end}${e.start&&e.end?'–'+e.end:''}`;
-    show(e.title,`${e.start?T('Mulai {n} menit lagi',{n:left}):T('Tenggat {n} menit lagi',{n:left})} · ${when} · ${catLabel(e.cat)}`,key);
+    const {e,at,key,now}=due[0],left=at-nowM,when=`${e.start||e.end}${e.start&&e.end?'–'+e.end:''}`;
+    const lead=now?(e.start?T('Mulai sekarang'):T('Tenggat sekarang')):e.start?T('Mulai {n} menit lagi',{n:left}):T('Tenggat {n} menit lagi',{n:left});
+    show(e.title,`${lead} · ${when} · ${catLabel(e.cat)}`,key);
   }else{ // several events due at the same check: ONE notification listing them, instead of a pile
     const line=({e})=>`${e.start||e.end} ${e.start?'':T('(tenggat)')+' '}${e.title}`.replace(/\s+/g,' ');
     const shown=due.slice(0,4).map(line);
     if(due.length>4)shown.push(T('+{n} lainnya',{n:due.length-4}));
-    show(T('{n} kegiatan segera dimulai',{n:due.length}),shown.join('\n'),`agenda-batch|${today}|${nowM}`);
+    show(due.every(x=>x.now)?T('{n} kegiatan dimulai sekarang',{n:due.length}):T('{n} kegiatan segera dimulai',{n:due.length}),shown.join('\n'),`agenda-batch|${today}|${nowM}`);
   }
 }
 renderNotify();
