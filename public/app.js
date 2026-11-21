@@ -1945,30 +1945,54 @@ async function voiceDone(){
 }
 
 /* ---------- conversation mode: listen, ask the assistant, read the answer aloud (the browser's own voice), listen again ---------- */
-// The best female voice the device has for the language; null when there is none (the browser default is used then)
-function pickVoice(){
-  const en=I18N.lang==='en',vs=TTS?TTS.getVoices():[];
-  const ok=vs.filter(v=>en?/^en/i.test(v.lang):(/^(id|in)[-_]?/i.test(v.lang)||/indones/i.test(v.name)));
-  const score=v=>(/gadis|damayanti|female|wanita|perempuan|zira|aria|jenny|samantha|google bahasa indonesia/i.test(v.name)?4:0)+(/\b(andika|male|david|mark|guy)\b/i.test(v.name)&&!/female/i.test(v.name)?-4:0)+(/natural|online/i.test(v.name)?2:0);
-  return ok.sort((a,b)=>score(b)-score(a))[0]||null;
+// Which language a piece of text is written in, so the voice matches what is really said (the assistant answers in the language it was spoken to).
+// 'id' or 'en' when clearly one of them, otherwise null (the caller falls back to the app language).
+const EN_W=new Set('the and you your is are to of in for on with have has this that it at be will can i my me do what when where how not there here am was were from but or if so we they he she'.split(' '));
+const ID_W=new Set('yang dan di ke dari untuk dengan ini itu ada anda kamu saya aku tidak akan jam besok hari kegiatan bisa atau pada sudah belum apa kapan berapa juga lagi mau sebagai karena kalau jadi lebih sama dalam oleh nya'.split(' '));
+function guessLang(t){
+  let en=0,id=0;
+  for(const w of String(t).toLowerCase().match(/[a-z']+/g)||[]){if(EN_W.has(w))en++;if(ID_W.has(w))id++}
+  return en>id&&en>=2?'en':id>en&&id>=2?'id':null;
+}
+// Female voice names (Windows, macOS, Android, Chrome) and male ones; the first list wins, a male voice is only the last resort
+const FEMALE_RE=/gadis|damayanti|zira|aria|jenny|michelle|ava|emma|libby|sonia|hazel|susan|samantha|karen|moira|tessa|victoria|allison|fiona|serena|joanna|salli|kimberly|female|wanita|perempuan|google bahasa indonesia|google us english|google uk english female|indonesian (indonesia)/i;
+const MALE_RE=/(andika|ardi|rizwan|david|mark|guy|george|ryan|james|daniel|alex|fred|tom|richard|davis|brian|eric|roger|andrew|male|pria|laki)/i;
+// the best voice the device has for the language: a female one if there is any. Returns {voice, female}; voice is null when the device has none for that language.
+function pickVoice(lang){
+  const vs=TTS?TTS.getVoices():[];
+  const ok=vs.filter(v=>lang==='en'?/^en/i.test(v.lang):(/^(id|in)[-_]?/i.test(v.lang)||/indones/i.test(v.name)));
+  const female=v=>FEMALE_RE.test(v.name)&&!/male/i.test(v.name.replace(/female/i,''));
+  const score=v=>(female(v)?10:0)+(MALE_RE.test(v.name.replace(/female/i,''))?-10:0)+(/natural|online|neural/i.test(v.name)?3:0)+(/^en-(us|gb)/i.test(v.lang)?1:0);
+  const best=ok.sort((x,y)=>score(y)-score(x))[0]||null;
+  return{voice:best,female:!!best&&female(best)};
+}
+// Chrome fills the voice list a moment after the page loads: wait for it (at most 1.5 s) before the first sentence
+function voicesReady(){
+  return new Promise(res=>{
+    if(!TTS||TTS.getVoices().length)return res();
+    const t=setTimeout(res,1500);
+    TTS.addEventListener?.('voiceschanged',()=>{clearTimeout(t);res()},{once:true});
+  });
 }
 // plain speakable text: no markdown, links, emoji; ranges such as 13:30–16:30 read as "… sampai …"
 function speechText(raw){
-  const en=I18N.lang==='en';
+  const en=(guessLang(raw)||I18N.lang)==='en';
   return String(raw).replace(/```[\s\S]*?```/g,' ').replace(/`([^`]*)`/g,'$1').replace(/!?\[([^\]]*)\]\([^)]*\)/g,'$1').replace(/https?:\/\/\S+/g,' ')
     .replace(/(\d)\s*[–—-]\s*(\d)/g,`$1 ${en?'to':'sampai'} $2`).replace(/[*_#>~|]+/g,' ').replace(/^\s*[-•]\s+/gm,'')
     .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu,'').replace(/\s+/g,' ').trim();
 }
 // speaks the answer sentence by sentence while it is still arriving (feed), then the rest (finish). done resolves when the voice is finished.
 function makeSpeaker(){
-  let spoken=0,pending=0,fin=false,off=false,chars=0,resolveDone;
+  let spoken=0,pending=0,fin=false,off=false,chars=0,lang=null,resolveDone;
   const done=new Promise(r=>{resolveDone=r});
   const check=()=>{if(fin&&pending<=0)resolveDone()};
   const say=t=>{
     pending++;chars+=t.length;
-    const u=new SpeechSynthesisUtterance(t),v=pickVoice();
-    if(v){u.voice=v;u.lang=v.lang}else u.lang=I18N.lang==='en'?'en-US':'id-ID';
-    u.pitch=1.05;u.rate=1;
+    const g=guessLang(t);if(!lang&&g)lang=g; // the first clear sentence decides the language of the whole answer
+    const L=lang||g||(I18N.lang==='en'?'en':'id'),{voice:v,female}=pickVoice(L);
+    const u=new SpeechSynthesisUtterance(t);
+    if(v){u.voice=v;u.lang=v.lang}else u.lang=L==='en'?'en-US':'id-ID';
+    u.pitch=v&&!female?1.4:1.1;u.rate=1; // a male-only device gets a higher pitch, as close to a female voice as it can get
     const end=()=>{pending--;check()};u.onend=end;u.onerror=end;
     try{TTS.speak(u)}catch(e){end()}
   };
@@ -2014,6 +2038,7 @@ function convRetry(){ // nothing was heard this round: listen again, but give up
 async function convTurn(text){
   convMisses=0;convPhase='think';
   voiceUi('busy',T('Asisten sedang berpikir…'));
+  await voicesReady();
   const sp=makeSpeaker();convSp=sp;
   const talking=()=>{if(convOn&&convPhase!=='speak'){convPhase='speak';voiceUi('busy',T('Asisten berbicara… ketuk di sini untuk menyela'))}};
   const rep=await askAI(text,{voice:true,onText:full=>{if(!convOn)return;talking();sp.feed(full)}});

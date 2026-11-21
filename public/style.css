@@ -379,8 +379,11 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 .ai-chiprow:empty{display:none}
 .ai-chiprow button{flex:none;border:1px solid var(--line-2);background:none;border-radius:8px;padding:5px 10px;font-size:.8rem;color:var(--ink)}
 .ai-chiprow button:hover{background:var(--hover)}
-.composer{display:flex;gap:4px;align-items:flex-end;margin:0 12px;padding:4px 4px 4px 16px;background:var(--surface-2);border-radius:24px}
-.composer textarea{flex:1;min-width:0;resize:none;min-height:40px;max-height:140px;background:none;border:0;outline:0;padding:9px 0}
+/* two rows: the message on top over the full width, the buttons underneath (talk, mic, picture on the left, send on the right) */
+.composer{display:flex;flex-wrap:wrap;gap:2px;align-items:center;margin:0 12px;padding:6px 8px 6px 16px;background:var(--surface-2);border-radius:24px}
+.composer textarea{flex:1 1 100%;min-width:0;resize:none;min-height:24px;max-height:140px;background:none;border:0;outline:0;padding:6px 8px 4px 0;line-height:1.4;scrollbar-width:thin}
+.composer .send,.composer #aiStop{margin-left:auto}
+.composer #aiStop:not([hidden])+.send{margin-left:0}
 .composer .send .ms{color:var(--accent)}
 .icon-btn.rec{background:var(--bad);color:#fff;animation:micpulse 1.4s ease-in-out infinite}
 .icon-btn.rec:hover{background:var(--bad)}
