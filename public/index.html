@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=add,history,assessment,auto_awesome,calendar_month,check,check_circle,chevron_left,chevron_right,close,dashboard,delete,edit,event_repeat,expand_more,flag,graphic_eq,image,info,lightbulb,logout,menu,mic,notes,notifications,notifications_active,notifications_off,progress_activity,record_voice_over,refresh,schedule,search,sell,send,settings,stop,warning&display=block">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=add,history,assessment,auto_awesome,calendar_month,check,check_circle,chevron_left,chevron_right,close,dashboard,delete,edit,event_repeat,expand_more,flag,image,info,lightbulb,logout,menu,mic,notes,notifications,notifications_active,notifications_off,progress_activity,refresh,schedule,search,sell,send,settings,stop,warning&display=block">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -163,17 +163,14 @@
       <div class="ai-chiprow" id="aiChipRow"></div>
       <div class="ai-attach" id="aiAttach" hidden></div>
       <div class="ai-voice" id="aiVoice" hidden role="status" aria-live="polite"><span class="dot" id="aiVoiceDot"></span><span id="aiVoiceTxt"></span></div>
-      <div class="vmenu" id="aiVoiceMenu" hidden role="menu"></div>
       <form class="composer" id="aiForm">
         <textarea id="aiInput" rows="1" placeholder="Tanya tentang jadwal Anda…" aria-label="Pesan ke asisten"></textarea>
         <input type="file" id="aiFile" accept="image/*" multiple hidden>
-        <button type="button" class="icon-btn" id="aiTalk" aria-label="Mode suara" aria-pressed="false" title="Mode suara: ngobrol dengan asisten, jawabannya dibacakan"><span class="ms">graphic_eq</span></button>
         <button type="button" class="icon-btn" id="aiMic" aria-label="Rekam suara" title="Rekam suara jadi teks"><span class="ms" id="aiMicIco">mic</span></button>
-        <button type="button" class="icon-btn" id="aiPick"aria-label="Lampirkan gambar" title="Lampirkan gambar (atau tempel dengan Ctrl+V)"><span class="ms">image</span></button>
+        <button type="button" class="icon-btn" id="aiPick" aria-label="Lampirkan gambar" title="Lampirkan gambar (atau tempel dengan Ctrl+V)"><span class="ms">image</span></button>
         <button type="button" class="icon-btn" id="aiStop" aria-label="Hentikan" title="Hentikan" hidden><span class="ms">stop</span></button>
         <button type="submit" class="icon-btn send" id="aiSend" aria-label="Kirim" title="Kirim"><span class="ms">send</span></button>
       </form>
-      <button type="button" class="vsel" id="aiVoiceBtn" hidden title="Pilih suara asisten"><span class="ms">record_voice_over</span><span id="aiVoiceName"></span></button>
       <p class="ai-note">Asisten membaca kegiatan sekitar 60 hari ke belakang dan ke depan. Asisten hanya mengusulkan perubahan jadwal; baru berlaku setelah Anda menekan Terapkan. Data jadwal dikirim ke penyedia AI yang Anda pilih di atas. Jika penyedia itu kena limit, jawaban otomatis dialihkan ke penyedia lain.</p>
     </aside>
   </div>
