@@ -1960,6 +1960,8 @@ const MALE_RE=/(andika|ardi|rizwan|david|mark|guy|george|ryan|james|daniel|alex
 // the best voice the device has for the language: a female one if there is any. Returns {voice, female}; voice is null when the device has none for that language.
 function pickVoice(lang){
   const vs=TTS?TTS.getVoices():[];
+  const saved=store.get('agenda-voice-'+lang),mine=saved&&vs.find(x=>x.name===saved); // a voice the user picked in the list wins
+  if(mine)return{voice:mine,female:true};
   const ok=vs.filter(v=>lang==='en'?/^en/i.test(v.lang):(/^(id|in)[-_]?/i.test(v.lang)||/indones/i.test(v.name)));
   const female=v=>FEMALE_RE.test(v.name)&&!/male/i.test(v.name.replace(/female/i,''));
   const score=v=>(female(v)?10:0)+(MALE_RE.test(v.name.replace(/female/i,''))?-10:0)+(/natural|online|neural/i.test(v.name)?3:0)+(/^en-(us|gb)/i.test(v.lang)?1:0);
@@ -2057,6 +2059,34 @@ async function convTurn(text){
   voiceUi('idle');convPhase='';voiceStart();
 }
 $('aiTalk').hidden=!(voiceOK&&TTS);
+// the voice list: shows which voice is used and lets the user pick another one (devices differ a lot in what they have)
+const voiceLang=v=>/^en/i.test(v.lang)?'en':'id';
+const vSex=v=>FEMALE_RE.test(v.name)&&!/male/i.test(v.name.replace(/female/i,''))?T('wanita'):MALE_RE.test(v.name.replace(/female/i,''))?T('pria'):'';
+function voiceLabel(){
+  const b=$('aiVoiceBtn');if(!TTS){b.hidden=true;return}
+  const L=I18N.lang==='en'?'en':'id',v=pickVoice(L).voice;
+  $('aiVoiceName').textContent=v?T('Suara: {n}',{n:v.name.replace(/^(Microsoft|Google)s+/,'')}):T('Suara: bawaan perangkat (pilih)');
+  b.hidden=false;
+}
+function voiceMenu(open){
+  const m=$('aiVoiceMenu');
+  if(!open||!TTS){m.hidden=true;return}
+  const L=I18N.lang==='en'?'en':'id';
+  const vs=TTS.getVoices().filter(v=>/^(id|in|en)/i.test(v.lang)||/indones/i.test(v.name)).sort((a,b)=>(voiceLang(a)===L?0:1)-(voiceLang(b)===L?0:1)||(vSex(b)===T('wanita'))-(vSex(a)===T('wanita'))||a.name.localeCompare(b.name));
+  if(!vs.length){toast(T('Perangkat ini belum punya suara Indonesia atau Inggris. Tambahkan lewat pengaturan sistem.'));m.hidden=true;return}
+  const cur={id:pickVoice('id').voice?.name,en:pickVoice('en').voice?.name};
+  m.innerHTML=`<div class="vh">${T('Pilih suara. Ketuk untuk mencoba dan memakainya.')}</div>`+vs.map(v=>`<button type="button" role="menuitemradio" data-vn="${esc(v.name)}" aria-checked="${cur[voiceLang(v)]===v.name}"><span>${esc(v.name)}</span><small>${esc(v.lang)}${vSex(v)?' · '+esc(vSex(v)):''}</small></button>`).join('');
+  m.hidden=false;
+}
+$('aiVoiceBtn').onclick=()=>{voicesReady().then(()=>voiceMenu($('aiVoiceMenu').hidden))};
+$('aiVoiceMenu').addEventListener('click',e=>{
+  const b=e.target.closest('[data-vn]');if(!b||!TTS)return;
+  const v=TTS.getVoices().find(x=>x.name===b.dataset.vn);if(!v)return;
+  const L=voiceLang(v);store.set('agenda-voice-'+L,v.name);
+  try{TTS.cancel();const u=new SpeechSynthesisUtterance(L==='en'?'Hello, this is my voice.':'Halo, ini suara saya.');u.voice=v;u.lang=v.lang;TTS.speak(u)}catch(err){}
+  voiceLabel();voiceMenu(false);
+});
+if(TTS){voicesReady().then(voiceLabel);TTS.addEventListener?.('voiceschanged',voiceLabel)}
 $('aiTalk').onclick=()=>{
   if(convOn){convStop(T('Mode suara dimatikan.'));return}
   if(aiBusy||voiceState!=='idle'){toast(T('Tunggu sebentar, lalu coba lagi.'));return}
