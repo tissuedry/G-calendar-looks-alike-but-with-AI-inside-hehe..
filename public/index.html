@@ -162,10 +162,12 @@
       </div>
       <div class="ai-chiprow" id="aiChipRow"></div>
       <div class="ai-attach" id="aiAttach" hidden></div>
+      <div class="ai-voice" id="aiVoice" hidden role="status" aria-live="polite"><span class="dot" id="aiVoiceDot"></span><span id="aiVoiceTxt"></span></div>
       <form class="composer" id="aiForm">
         <textarea id="aiInput" rows="1" placeholder="Tanya tentang jadwal Anda…" aria-label="Pesan ke asisten"></textarea>
         <input type="file" id="aiFile" accept="image/*" multiple hidden>
-        <button type="button" class="icon-btn" id="aiPick" aria-label="Lampirkan gambar" title="Lampirkan gambar (atau tempel dengan Ctrl+V)"><span class="ms">image</span></button>
+        <button type="button" class="icon-btn" id="aiMic" aria-label="Rekam suara" title="Rekam suara jadi teks"><span class="ms" id="aiMicIco">mic</span></button>
+        <button type="button" class="icon-btn" id="aiPick"aria-label="Lampirkan gambar" title="Lampirkan gambar (atau tempel dengan Ctrl+V)"><span class="ms">image</span></button>
         <button type="button" class="icon-btn" id="aiStop" aria-label="Hentikan" title="Hentikan" hidden><span class="ms">stop</span></button>
         <button type="submit" class="icon-btn send" id="aiSend" aria-label="Kirim" title="Kirim"><span class="ms">send</span></button>
       </form>

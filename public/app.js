@@ -1118,7 +1118,7 @@ const AI_CHIPS=[
 const AI_MAX_LINES={groq:100,gemini:250};
 // change requests (tool mode) get a lean prompt: fewer events, no per-day summary, no answer-formatting rules
 const AI_MAX_LINES_EDIT={groq:60,gemini:120};
-let aiTurns=[], aiBusy=false, aiCtl=null;
+let aiTurns=[], aiBusy=false, aiCtl=null, voiceState='idle'; // voiceState: idle | rec | busy (see the voice input block)
 let aiProv=store.get('agenda-ai-provider'), aiProviders=null;
 async function loadProviders(){
   if(aiProviders)return;
@@ -1768,6 +1768,7 @@ async function askAI(text,opts={}){
 function setAI(open){
   $('aiPanel').hidden=!open;$('aiBtn').setAttribute('aria-pressed',open);$('tabAI').setAttribute('aria-pressed',open);
   store.set('agenda-ai',open?'1':'0');
+  if(!open)voiceCancel(); // closing the panel drops a recording in progress
   if(open){renderAI();closeDrawer();loadProviders();setTimeout(()=>$('aiInput').focus(),30)}
 }
 // drag the panel's left edge to resize it (desktop); width is remembered
@@ -1799,6 +1800,7 @@ $('aiForm').addEventListener('submit',e=>{
   e.preventDefault();
   let v=$('aiInput').value;
   if(!v.trim()&&aiPics.length)v=T('Tolong analisis gambar ini.'); // a picture with no words still gets a question
+  if(voiceState!=='idle'){toast(T('Selesaikan rekaman dulu.'));return}
   if(aiBusy||!v.trim())return;
   $('aiInput').value='';$('aiInput').style.height='auto';askAI(v);
 });
@@ -1841,6 +1843,94 @@ function renderPics(){
   box.innerHTML=aiPics.map((p,i)=>`<span class="th"><img src="${p.src}" alt=""><button type="button" class="x" data-rmpic="${i}" aria-label="${T('Hapus gambar')}" title="${T('Hapus gambar')}"><span class="ms">close</span></button></span>`).join('');
 }
 $('aiAttach').addEventListener('click',e=>{const b=e.target.closest('[data-rmpic]');if(b){aiPics.splice(+b.dataset.rmpic,1);renderPics()}});
+/* ---------- voice input: record in the browser, the server turns it into text, the text lands in the message box ---------- */
+const VOICE_MAX_MS=120000; // 2 minutes keeps the upload far below the server's size limit
+let vRec=null,vStream=null,vChunks=[],vTimer=null,vT0=0,vCtx=null,vAna=null,vPeak=0,vCancel=false,vJob=0,vMime='';
+const voiceOK=!!(navigator.mediaDevices?.getUserMedia&&window.MediaRecorder&&window.isSecureContext!==false);
+function voiceUi(s,txt=''){
+  voiceState=s;
+  const b=$('aiMic');
+  b.classList.toggle('rec',s==='rec');b.classList.toggle('busy',s==='busy');b.disabled=s==='busy';
+  $('aiMicIco').textContent=s==='rec'?'stop':s==='busy'?'progress_activity':'mic';
+  const tip=s==='rec'?T('Selesai merekam'):T('Rekam suara');b.title=tip;b.setAttribute('aria-label',tip);
+  const bar=$('aiVoice');bar.hidden=s==='idle';bar.classList.toggle('busy',s==='busy');$('aiVoiceTxt').textContent=txt;
+}
+function voiceRelease(){ // free the microphone and the timers, whatever happened
+  clearInterval(vTimer);vTimer=null;
+  try{vStream?.getTracks().forEach(t=>t.stop())}catch(e){}
+  try{vCtx?.close()}catch(e){}
+  vStream=null;vCtx=null;vAna=null;
+}
+function voiceTick(){
+  const s=Math.floor((Date.now()-vT0)/1000);
+  $('aiVoiceTxt').textContent=`${T('Merekam…')} ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} · ${T('ketuk tombol stop untuk selesai, Esc untuk batal')}`;
+  if(vAna){const a=new Uint8Array(vAna.fftSize);vAna.getByteTimeDomainData(a);let m=0;for(const v of a)m=Math.max(m,Math.abs(v-128));vPeak=Math.max(vPeak,m/128)}
+  if(Date.now()-vT0>=VOICE_MAX_MS){toast(T('Batas 2 menit tercapai, rekaman diproses.'));voiceStop()}
+}
+function voiceErr(e){
+  const n=e?.name||'';
+  if(n==='NotAllowedError'||n==='SecurityError')return T('Izin mikrofon ditolak. Izinkan lewat ikon gembok di address bar, lalu coba lagi.');
+  if(n==='NotFoundError'||n==='OverconstrainedError')return T('Mikrofon tidak ditemukan.');
+  if(n==='NotReadableError'||n==='AbortError')return T('Mikrofon sedang dipakai aplikasi lain.');
+  return T('Tidak bisa memulai rekaman.');
+}
+async function voiceStart(){
+  if(voiceState!=='idle')return;
+  if(aiBusy){toast(T('Tunggu jawaban asisten selesai dulu.'));return}
+  voiceUi('busy',T('Menyiapkan mikrofon…')); // blocks a double click while the permission prompt is open
+  try{vStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})}
+  catch(e){voiceUi('idle');toast(voiceErr(e));return}
+  if($('aiPanel').hidden){voiceRelease();voiceUi('idle');return} // the panel was closed while the permission prompt was open
+  const mt=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported?.(t))||'';
+  try{vRec=new MediaRecorder(vStream,{...(mt?{mimeType:mt}:{}),audioBitsPerSecond:32000})}
+  catch(e){try{vRec=new MediaRecorder(vStream)}catch(e2){voiceRelease();voiceUi('idle');toast(T('Browser ini tidak bisa merekam suara.'));return}}
+  vChunks=[];vCancel=false;vPeak=0;vMime=vRec.mimeType||mt||'audio/webm';
+  vRec.ondataavailable=e=>{if(e.data&&e.data.size)vChunks.push(e.data)};
+  vRec.onerror=()=>{vCancel=true;try{vRec.stop()}catch(e){}toast(T('Rekaman terhenti karena ada masalah. Coba lagi.'))};
+  const me=vRec;vRec.onstop=()=>{if(vRec===me)voiceDone()}; // a late stop event of an older recording must not touch a new one
+  try{ // a level meter, only used to notice a recording with no sound at all; it is fine if this is unavailable
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(AC){vCtx=new AC();vAna=vCtx.createAnalyser();vAna.fftSize=1024;vCtx.createMediaStreamSource(vStream).connect(vAna)}
+  }catch(e){vAna=null}
+  try{vRec.start(1000)}catch(e){voiceRelease();voiceUi('idle');toast(T('Tidak bisa memulai rekaman.'));return}
+  vT0=Date.now();vTimer=setInterval(voiceTick,200);voiceUi('rec');voiceTick();
+}
+function voiceStop(){if(vRec&&vRec.state!=='inactive'){try{vRec.stop()}catch(e){voiceRelease();voiceUi('idle')}}}
+function voiceCancel(){
+  if(voiceState==='idle')return;
+  vJob++; // an answer still on its way is ignored
+  if(voiceState==='rec'&&vRec&&vRec.state!=='inactive'){vCancel=true;try{vRec.stop()}catch(e){}}
+  voiceRelease();voiceUi('idle');
+}
+async function voiceDone(){
+  const dur=Date.now()-vT0,blob=new Blob(vChunks,{type:vMime}),quiet=!!vAna&&vPeak<0.03,cancelled=vCancel;
+  voiceRelease();vChunks=[];
+  if(cancelled){if(voiceState!=='idle')voiceUi('idle');return}
+  if(dur<700||blob.size<1500){voiceUi('idle');toast(T('Rekaman terlalu singkat. Tahan sebentar lalu bicara.'));return}
+  if(quiet){voiceUi('idle');toast(T('Tidak terdengar suara. Periksa mikrofon lalu coba lagi.'));return}
+  const job=++vJob;
+  voiceUi('busy',T('Mengubah suara jadi teks…'));
+  try{
+    const b64=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=()=>no(r.error);r.readAsDataURL(blob)});
+    let d=null;
+    for(let i=0;i<2&&!d;i++){ // one automatic retry for a dropped connection or a server hiccup, never for a refusal
+      try{d=await api('transcribe',{method:'POST',body:{audio:b64,mime:vMime,lang:I18N.lang}})}
+      catch(e){if(i||(e.status&&e.status<500))throw e;await new Promise(r=>setTimeout(r,800))}
+    }
+    if(job!==vJob)return;
+    const text=(d?.text||'').trim();
+    if(!text){toast(T('Tidak ada ucapan yang terbaca. Coba bicara lebih dekat ke mikrofon.'));return}
+    const ta=$('aiInput'),v=ta.value,a=ta.selectionStart??v.length,z=ta.selectionEnd??v.length;
+    const pre=v.slice(0,a),post=v.slice(z);
+    const ins=(pre&&!/\s$/.test(pre)?' ':'')+text+(post&&!/^\s/.test(post)?' ':'');
+    ta.value=pre+ins+post;const c=(pre+ins).length;ta.setSelectionRange(c,c);
+    ta.dispatchEvent(new Event('input'));ta.focus();
+  }catch(e){if(job===vJob)toast(e.message||T('Gagal mengubah suara jadi teks.'))}
+  finally{if(job===vJob)voiceUi('idle')}
+}
+$('aiMic').hidden=!voiceOK;
+$('aiMic').onclick=()=>{if(voiceState==='rec')voiceStop();else voiceStart()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&voiceState==='rec'){e.preventDefault();e.stopPropagation();voiceCancel()}},true);
 $('aiPick').onclick=()=>$('aiFile').click();
 $('aiFile').addEventListener('change',e=>{addPics(e.target.files);e.target.value=''});
 $('aiInput').addEventListener('paste',e=>{
