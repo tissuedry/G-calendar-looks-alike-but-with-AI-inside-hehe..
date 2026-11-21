@@ -384,6 +384,8 @@ kbd{font:inherit;font-size:.72rem;border:1px solid var(--line);border-radius:4px
 .composer .send .ms{color:var(--accent)}
 .icon-btn.rec{background:var(--bad);color:#fff;animation:micpulse 1.4s ease-in-out infinite}
 .icon-btn.rec:hover{background:var(--bad)}
+.icon-btn.on{background:var(--accent-soft);color:var(--accent-ink)}
+.ai-voice.talk{cursor:pointer}
 .icon-btn.busy .ms{animation:micspin 1s linear infinite}
 .icon-btn:disabled{opacity:.5}
 .ai-voice{display:flex;align-items:center;gap:8px;margin:0 12px 6px;padding:6px 14px;border-radius:16px;background:var(--surface-2);font-size:.8rem;color:var(--muted)}

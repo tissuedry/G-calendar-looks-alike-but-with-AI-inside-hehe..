@@ -1727,14 +1727,16 @@ async function askAI(text,opts={}){
   const bubble=()=>$('aiLog').lastElementChild;
   bubble()?.scrollIntoView({block:'end'});
   try{
-    const context=aiContext(useTools)+propNote; // aiContext also rebuilds the #ref -> event id map used by buildProposals
+    // spoken conversation: the answer is read aloud, so it should be short and plain
+    const voiceNote=opts.voice?`\n\n${I18N.lang==='en'?'The user is talking to you by voice and your reply will be read aloud: answer briefly and naturally in plain sentences, with no markdown, tables, lists or emoji.':'Pengguna berbicara denganmu lewat suara dan jawabanmu akan dibacakan: jawab singkat dan natural dengan kalimat biasa, tanpa markdown, tabel, daftar, atau emoji.'}`:'';
+    const context=aiContext(useTools)+propNote+voiceNote; // aiContext also rebuilds the #ref -> event id map used by buildProposals
     const run=async force=>{
     const r=await fetch('/api/ai',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({system:context,messages:hist,provider:aiProv||undefined,lang:I18N.lang,tools:useTools,force:force||undefined,images:pics.length?pics.map(p=>({mime:p.mime,data:p.src.split(',')[1]})):undefined}),signal:aiCtl.signal});
     if(!r.ok){let d={};try{d=await r.json()}catch(e){}if(r.status===401)showLogin();const er=new Error(d.error?TS(d.error):T('Terjadi gangguan ({n}).',{n:r.status}));er.code=d.code;throw er}
     reply.via=r.headers.get('X-AI-Provider')||'';reply.model=r.headers.get('X-AI-Model')||'';
     const onLine=line=>{
       let o;try{o=JSON.parse(line)}catch(e){return}
-      if(o.type==='text'){reply.content+=o.text;reply.pending=false;const b=bubble();if(b){b.innerHTML=md(reply.content);b.scrollIntoView({block:'nearest'})}}
+      if(o.type==='text'){reply.content+=o.text;reply.pending=false;const b=bubble();if(b){b.innerHTML=md(reply.content);b.scrollIntoView({block:'nearest'})}if(!useTools)opts.onText?.(reply.content)} // with the tool, text can still hold a proposal block, so it is only read at the end
       else if(o.type==='actions'){reply.pending=false;reply.proposals=buildProposals(o.actions||[])}
     };
     const reader=r.body.getReader(),dec=new TextDecoder();let buf='';
@@ -1757,13 +1759,14 @@ async function askAI(text,opts={}){
     if(!reply.content.trim()&&!reply.proposals?.length){reply.content=T('Tidak ada jawaban dari AI. Coba kirim lagi.');reply.error=true}
   }catch(e){
     reply.pending=false;
-    if(e.name==='AbortError')reply.content=(reply.content?reply.content+'\n\n':'')+T('(Dihentikan)');
+    if(e.name==='AbortError'){reply.aborted=true;reply.content=(reply.content?reply.content+'\n\n':'')+T('(Dihentikan)')}
     else if(reply.content||reply.proposals?.length)reply.content+='\n\n'+T('(Koneksi terputus.)');
     else{reply.content=AI_ERR_KEYS[e.code]?T(AI_ERR_KEYS[e.code]):(e.message||T('Terjadi gangguan. Coba kirim lagi.'));reply.error=true}
   }finally{
     aiBusy=false;aiCtl=null;$('aiStop').hidden=true;$('aiSend').disabled=false;renderAI();
     $('aiLog').lastElementChild?.scrollIntoView({block:'nearest'});
   }
+  return reply;
 }
 function setAI(open){
   $('aiPanel').hidden=!open;$('aiBtn').setAttribute('aria-pressed',open);$('tabAI').setAttribute('aria-pressed',open);
@@ -1846,6 +1849,8 @@ $('aiAttach').addEventListener('click',e=>{const b=e.target.closest('[data-rmpic
 /* ---------- voice input: record in the browser, the server turns it into text, the text lands in the message box ---------- */
 const VOICE_MAX_MS=120000; // 2 minutes keeps the upload far below the server's size limit
 let vRec=null,vStream=null,vChunks=[],vTimer=null,vT0=0,vCtx=null,vAna=null,vPeak=0,vCancel=false,vJob=0,vMime='';
+let convOn=false,convPhase='',convSp=null,convMisses=0,convInterrupt=false,vFloor=1,vSpeech=false,vLast=0; // conversation mode state
+const TTS=window.speechSynthesis&&window.SpeechSynthesisUtterance?window.speechSynthesis:null;
 const voiceOK=!!(navigator.mediaDevices?.getUserMedia&&window.MediaRecorder&&window.isSecureContext!==false);
 function voiceUi(s,txt=''){
   voiceState=s;
@@ -1853,7 +1858,7 @@ function voiceUi(s,txt=''){
   b.classList.toggle('rec',s==='rec');b.classList.toggle('busy',s==='busy');b.disabled=s==='busy';
   $('aiMicIco').textContent=s==='rec'?'stop':s==='busy'?'progress_activity':'mic';
   const tip=s==='rec'?T('Selesai merekam'):T('Rekam suara');b.title=tip;b.setAttribute('aria-label',tip);
-  const bar=$('aiVoice');bar.hidden=s==='idle';bar.classList.toggle('busy',s==='busy');$('aiVoiceTxt').textContent=txt;
+  const bar=$('aiVoice');bar.hidden=s==='idle';bar.classList.toggle('busy',s==='busy');bar.classList.toggle('talk',convOn&&convPhase==='speak');$('aiVoiceTxt').textContent=txt;
 }
 function voiceRelease(){ // free the microphone and the timers, whatever happened
   clearInterval(vTimer);vTimer=null;
@@ -1862,10 +1867,18 @@ function voiceRelease(){ // free the microphone and the timers, whatever happene
   vStream=null;vCtx=null;vAna=null;
 }
 function voiceTick(){
-  const s=Math.floor((Date.now()-vT0)/1000);
-  $('aiVoiceTxt').textContent=`${T('Merekam…')} ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} · ${T('ketuk tombol stop untuk selesai, Esc untuk batal')}`;
-  if(vAna){const a=new Uint8Array(vAna.fftSize);vAna.getByteTimeDomainData(a);let m=0;for(const v of a)m=Math.max(m,Math.abs(v-128));vPeak=Math.max(vPeak,m/128)}
-  if(Date.now()-vT0>=VOICE_MAX_MS){toast(T('Batas 2 menit tercapai, rekaman diproses.'));voiceStop()}
+  const now=Date.now(),s=Math.floor((now-vT0)/1000);
+  let lvl=0;
+  if(vAna){const a=new Uint8Array(vAna.fftSize);vAna.getByteTimeDomainData(a);let m=0;for(const v of a)m=Math.max(m,Math.abs(v-128));lvl=m/128;vPeak=Math.max(vPeak,lvl)}
+  if(convOn){
+    // conversation mode: the recording ends by itself after a pause in the speech. The noise floor is the quietest moment so far.
+    vFloor=Math.min(vFloor,lvl);
+    if(lvl>Math.max(0.05,vFloor*3)){vSpeech=true;vLast=now}
+    $('aiVoiceTxt').textContent=vSpeech?T('Mendengarkan…'):T('Silakan bicara…');
+    if(vSpeech&&now-vLast>1400)voiceStop();      // finished talking
+    else if(!vSpeech&&now-vT0>10000)voiceStop(); // nobody spoke
+  }else $('aiVoiceTxt').textContent=`${T('Merekam…')} ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')} · ${T('ketuk tombol stop untuk selesai, Esc untuk batal')}`;
+  if(now-vT0>=VOICE_MAX_MS){if(!convOn)toast(T('Batas 2 menit tercapai, rekaman diproses.'));voiceStop()}
 }
 function voiceErr(e){
   const n=e?.name||'';
@@ -1879,24 +1892,25 @@ async function voiceStart(){
   if(aiBusy){toast(T('Tunggu jawaban asisten selesai dulu.'));return}
   voiceUi('busy',T('Menyiapkan mikrofon…')); // blocks a double click while the permission prompt is open
   try{vStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}})}
-  catch(e){voiceUi('idle');toast(voiceErr(e));return}
-  if($('aiPanel').hidden){voiceRelease();voiceUi('idle');return} // the panel was closed while the permission prompt was open
+  catch(e){voiceUi('idle');toast(voiceErr(e));if(convOn)convStop();return}
+  if($('aiPanel').hidden||(convOn===false&&voiceState!=='busy')){voiceRelease();voiceUi('idle');return} // the panel was closed (or the mode switched off) while the permission prompt was open
   const mt=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported?.(t))||'';
   try{vRec=new MediaRecorder(vStream,{...(mt?{mimeType:mt}:{}),audioBitsPerSecond:32000})}
-  catch(e){try{vRec=new MediaRecorder(vStream)}catch(e2){voiceRelease();voiceUi('idle');toast(T('Browser ini tidak bisa merekam suara.'));return}}
-  vChunks=[];vCancel=false;vPeak=0;vMime=vRec.mimeType||mt||'audio/webm';
+  catch(e){try{vRec=new MediaRecorder(vStream)}catch(e2){voiceRelease();voiceUi('idle');toast(T('Browser ini tidak bisa merekam suara.'));if(convOn)convStop();return}}
+  vChunks=[];vCancel=false;vPeak=0;vFloor=1;vSpeech=false;vLast=0;vMime=vRec.mimeType||mt||'audio/webm';
   vRec.ondataavailable=e=>{if(e.data&&e.data.size)vChunks.push(e.data)};
   vRec.onerror=()=>{vCancel=true;try{vRec.stop()}catch(e){}toast(T('Rekaman terhenti karena ada masalah. Coba lagi.'))};
   const me=vRec;vRec.onstop=()=>{if(vRec===me)voiceDone()}; // a late stop event of an older recording must not touch a new one
   try{ // a level meter, only used to notice a recording with no sound at all; it is fine if this is unavailable
     const AC=window.AudioContext||window.webkitAudioContext;
-    if(AC){vCtx=new AC();vAna=vCtx.createAnalyser();vAna.fftSize=1024;vCtx.createMediaStreamSource(vStream).connect(vAna)}
+    if(AC){vCtx=new AC();vAna=vCtx.createAnalyser();vAna.fftSize=4096;vCtx.createMediaStreamSource(vStream).connect(vAna)}
   }catch(e){vAna=null}
-  try{vRec.start(1000)}catch(e){voiceRelease();voiceUi('idle');toast(T('Tidak bisa memulai rekaman.'));return}
-  vT0=Date.now();vTimer=setInterval(voiceTick,200);voiceUi('rec');voiceTick();
+  try{vRec.start(1000)}catch(e){voiceRelease();voiceUi('idle');toast(T('Tidak bisa memulai rekaman.'));if(convOn)convStop();return}
+  vT0=Date.now();vTimer=setInterval(voiceTick,100);voiceUi('rec');convPhase='listen';voiceTick();
 }
 function voiceStop(){if(vRec&&vRec.state!=='inactive'){try{vRec.stop()}catch(e){voiceRelease();voiceUi('idle')}}}
 function voiceCancel(){
+  if(convOn){convStop();return}
   if(voiceState==='idle')return;
   vJob++; // an answer still on its way is ignored
   if(voiceState==='rec'&&vRec&&vRec.state!=='inactive'){vCancel=true;try{vRec.stop()}catch(e){}}
@@ -1906,8 +1920,8 @@ async function voiceDone(){
   const dur=Date.now()-vT0,blob=new Blob(vChunks,{type:vMime}),quiet=!!vAna&&vPeak<0.03,cancelled=vCancel;
   voiceRelease();vChunks=[];
   if(cancelled){if(voiceState!=='idle')voiceUi('idle');return}
-  if(dur<700||blob.size<1500){voiceUi('idle');toast(T('Rekaman terlalu singkat. Tahan sebentar lalu bicara.'));return}
-  if(quiet){voiceUi('idle');toast(T('Tidak terdengar suara. Periksa mikrofon lalu coba lagi.'));return}
+  if(dur<700||blob.size<1500){voiceUi('idle');if(convOn)convRetry();else toast(T('Rekaman terlalu singkat. Tahan sebentar lalu bicara.'));return}
+  if(quiet){voiceUi('idle');if(convOn)convRetry();else toast(T('Tidak terdengar suara. Periksa mikrofon lalu coba lagi.'));return}
   const job=++vJob;
   voiceUi('busy',T('Mengubah suara jadi teks…'));
   try{
@@ -1919,18 +1933,120 @@ async function voiceDone(){
     }
     if(job!==vJob)return;
     const text=(d?.text||'').trim();
-    if(!text){toast(T('Tidak ada ucapan yang terbaca. Coba bicara lebih dekat ke mikrofon.'));return}
+    if(!text){if(convOn){voiceUi('idle');convRetry()}else toast(T('Tidak ada ucapan yang terbaca. Coba bicara lebih dekat ke mikrofon.'));return}
+    if(convOn){await convTurn(text);return} // conversation mode sends the sentence straight away
     const ta=$('aiInput'),v=ta.value,a=ta.selectionStart??v.length,z=ta.selectionEnd??v.length;
     const pre=v.slice(0,a),post=v.slice(z);
     const ins=(pre&&!/\s$/.test(pre)?' ':'')+text+(post&&!/^\s/.test(post)?' ':'');
     ta.value=pre+ins+post;const c=(pre+ins).length;ta.setSelectionRange(c,c);
     ta.dispatchEvent(new Event('input'));ta.focus();
-  }catch(e){if(job===vJob)toast(e.message||T('Gagal mengubah suara jadi teks.'))}
-  finally{if(job===vJob)voiceUi('idle')}
+  }catch(e){if(job===vJob){if(convOn)convStop(e.message||T('Gagal mengubah suara jadi teks.'));else toast(e.message||T('Gagal mengubah suara jadi teks.'))}}
+  finally{if(job===vJob&&!convOn)voiceUi('idle')}
 }
+
+/* ---------- conversation mode: listen, ask the assistant, read the answer aloud (the browser's own voice), listen again ---------- */
+// The best female voice the device has for the language; null when there is none (the browser default is used then)
+function pickVoice(){
+  const en=I18N.lang==='en',vs=TTS?TTS.getVoices():[];
+  const ok=vs.filter(v=>en?/^en/i.test(v.lang):(/^(id|in)[-_]?/i.test(v.lang)||/indones/i.test(v.name)));
+  const score=v=>(/gadis|damayanti|female|wanita|perempuan|zira|aria|jenny|samantha|google bahasa indonesia/i.test(v.name)?4:0)+(/\b(andika|male|david|mark|guy)\b/i.test(v.name)&&!/female/i.test(v.name)?-4:0)+(/natural|online/i.test(v.name)?2:0);
+  return ok.sort((a,b)=>score(b)-score(a))[0]||null;
+}
+// plain speakable text: no markdown, links, emoji; ranges such as 13:30–16:30 read as "… sampai …"
+function speechText(raw){
+  const en=I18N.lang==='en';
+  return String(raw).replace(/```[\s\S]*?```/g,' ').replace(/`([^`]*)`/g,'$1').replace(/!?\[([^\]]*)\]\([^)]*\)/g,'$1').replace(/https?:\/\/\S+/g,' ')
+    .replace(/(\d)\s*[–—-]\s*(\d)/g,`$1 ${en?'to':'sampai'} $2`).replace(/[*_#>~|]+/g,' ').replace(/^\s*[-•]\s+/gm,'')
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu,'').replace(/\s+/g,' ').trim();
+}
+// speaks the answer sentence by sentence while it is still arriving (feed), then the rest (finish). done resolves when the voice is finished.
+function makeSpeaker(){
+  let spoken=0,pending=0,fin=false,off=false,chars=0,resolveDone;
+  const done=new Promise(r=>{resolveDone=r});
+  const check=()=>{if(fin&&pending<=0)resolveDone()};
+  const say=t=>{
+    pending++;chars+=t.length;
+    const u=new SpeechSynthesisUtterance(t),v=pickVoice();
+    if(v){u.voice=v;u.lang=v.lang}else u.lang=I18N.lang==='en'?'en-US':'id-ID';
+    u.pitch=1.05;u.rate=1;
+    const end=()=>{pending--;check()};u.onend=end;u.onerror=end;
+    try{TTS.speak(u)}catch(e){end()}
+  };
+  const pieces=t=>{ // very long sentences are cut at a comma or space: some browsers stop speaking after ~15 seconds
+    const out=[];while(t.length>200){let i=Math.max(t.lastIndexOf(', ',200),t.lastIndexOf('; ',200));if(i<60)i=t.lastIndexOf(' ',200);if(i<60)i=200;out.push(t.slice(0,i+1));t=t.slice(i+1).trim()}
+    if(t)out.push(t);return out;
+  };
+  const sayRaw=raw=>{const t=speechText(raw);if(t)pieces(t).forEach(say)};
+  return{
+    done,
+    feed(full){
+      if(off||fin)return;
+      if(full.length<spoken){try{TTS.cancel()}catch(e){}pending=0;spoken=0} // the text was rewritten: start over
+      const re=/[.!?]\s|\n/g;re.lastIndex=spoken;let m,last=spoken;
+      while((m=re.exec(full))){const end=m.index+m[0].length;sayRaw(full.slice(last,end));last=end}
+      spoken=last;
+    },
+    finish(full,extra){
+      if(off)return;
+      if(full.length<spoken){try{TTS.cancel()}catch(e){}pending=0;spoken=0}
+      sayRaw(full.slice(spoken));spoken=full.length;
+      if(extra)sayRaw(extra);
+      fin=true;check();
+      setTimeout(resolveDone,Math.min(120000,chars*130+5000)); // some voices never report the end: never get stuck
+    },
+    cancel(){off=true;fin=true;try{TTS.cancel()}catch(e){}resolveDone()},
+  };
+}
+function convStop(msg){
+  const was=convOn;convOn=false;convPhase='';convInterrupt=false;
+  try{TTS?.cancel()}catch(e){}
+  convSp?.cancel();convSp=null;
+  const b=$('aiTalk');b.setAttribute('aria-pressed','false');b.classList.remove('on');
+  if(was&&aiBusy)aiCtl?.abort();
+  voiceCancel();
+  if(msg)toast(msg);
+}
+function convRetry(){ // nothing was heard this round: listen again, but give up after three in a row
+  if(!convOn)return;
+  if(++convMisses>=3){convStop(T('Mode suara berhenti karena tidak ada ucapan.'));return}
+  voiceStart();
+}
+async function convTurn(text){
+  convMisses=0;convPhase='think';
+  voiceUi('busy',T('Asisten sedang berpikir…'));
+  const sp=makeSpeaker();convSp=sp;
+  const talking=()=>{if(convOn&&convPhase!=='speak'){convPhase='speak';voiceUi('busy',T('Asisten berbicara… ketuk di sini untuk menyela'))}};
+  const rep=await askAI(text,{voice:true,onText:full=>{if(!convOn)return;talking();sp.feed(full)}});
+  if(!convOn||convSp!==sp){sp.cancel();return}
+  if(rep?.aborted&&!convInterrupt){convStop();return}
+  if(!rep||rep.aborted){sp.cancel()}
+  else{
+    talking();
+    if(rep.error){sp.finish(T('Maaf, ada gangguan. Coba lagi.'))}
+    else sp.finish(rep.content||'',rep.proposals?.length?T('Ada {n} usulan perubahan di layar. Silakan periksa, lalu tekan Terapkan.',{n:rep.proposals.length}):'');
+    if(rep.error&&++convMisses>=2){await sp.done;convStop(T('Mode suara berhenti karena ada gangguan.'));return}
+  }
+  await sp.done;
+  convInterrupt=false;
+  if(!convOn)return;
+  voiceUi('idle');convPhase='';voiceStart();
+}
+$('aiTalk').hidden=!(voiceOK&&TTS);
+$('aiTalk').onclick=()=>{
+  if(convOn){convStop(T('Mode suara dimatikan.'));return}
+  if(aiBusy||voiceState!=='idle'){toast(T('Tunggu sebentar, lalu coba lagi.'));return}
+  convOn=true;convMisses=0;convInterrupt=false;
+  const b=$('aiTalk');b.setAttribute('aria-pressed','true');b.classList.add('on');
+  try{TTS.cancel();const u=new SpeechSynthesisUtterance(' ');u.volume=0;TTS.speak(u)}catch(e){} // a tap is needed once before some browsers (iOS) allow speech
+  voiceStart();
+};
+$('aiVoice').onclick=()=>{ // tap the bar while the assistant talks: it stops and listens right away
+  if(!(convOn&&convPhase==='speak'))return;
+  convInterrupt=true;convSp?.cancel();if(aiBusy)aiCtl?.abort();
+};
 $('aiMic').hidden=!voiceOK;
-$('aiMic').onclick=()=>{if(voiceState==='rec')voiceStop();else voiceStart()};
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&voiceState==='rec'){e.preventDefault();e.stopPropagation();voiceCancel()}},true);
+$('aiMic').onclick=()=>{if(voiceState==='rec')voiceStop();else if(!convOn)voiceStart()};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&(voiceState==='rec'||convOn)){e.preventDefault();e.stopPropagation();voiceCancel()}},true);
 $('aiPick').onclick=()=>$('aiFile').click();
 $('aiFile').addEventListener('change',e=>{addPics(e.target.files);e.target.value=''});
 $('aiInput').addEventListener('paste',e=>{
